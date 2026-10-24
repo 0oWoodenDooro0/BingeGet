@@ -7,7 +7,14 @@
     "dev": "vite",
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
-    "typegen": "cargo test --manifest-path src-tauri/Cargo.toml --test export_schema_test"
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
+    "typegen": "cargo test --manifest-path src-tauri/Cargo.toml --test export_schema_test",
+    "check:theme": "node scripts/check-theme-guardrails.mjs",
+    "check:types": "vue-tsc --noEmit",
+    "test:fe": "npm run check:theme && npm run check:types",
+    "test:be": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test": "npm run test:fe && npm run test:be",
+    "check": "npm run test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+echo "🔍 Running pre-commit checks..."
+npm run check:theme
+npm run check:types
+echo "✅ Pre-commit checks passed!"
