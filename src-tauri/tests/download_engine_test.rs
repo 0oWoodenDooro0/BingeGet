@@ -39,9 +39,10 @@ fn test_build_download_args_with_jellyfin_naming() {
     let mux_pos = args.iter().position(|a| a == "-M").expect("must have -M");
     assert_eq!(args[mux_pos + 1], "format=mp4");
 
-    // Check cleanup and auto-select
+    // Check cleanup, no-log, and auto-select
     assert!(args.contains(&"--auto-select".to_string()));
     assert!(args.contains(&"--del-after-done".to_string()));
+    assert!(args.contains(&"--no-log".to_string()));
 
     // Check headers
     let has_referer = args.iter().any(|a| a.starts_with("Referer: https://chinaq.fun/"));
@@ -64,6 +65,7 @@ fn test_build_download_args_double_digit_season() {
 
     let save_name_pos = args.iter().position(|a| a == "--save-name").unwrap();
     assert_eq!(args[save_name_pos + 1], "老友記 - S10E24");
+    assert!(args.contains(&"--no-log".to_string()));
 }
 
 #[test]
@@ -81,7 +83,69 @@ fn test_parse_progress_line() {
     assert_eq!(p2.speed, "12.3MB/s");
     assert_eq!(p2.eta, "00:01:10");
 
+    // Case 3: n-m3u8dl-re initial state with negative rate and dashed ETA
+    let line3 = "0.0% -0.00Bps --:--:--";
+    let p3 = parse_progress_line(line3).expect("Should parse initial n-m3u8dl-re line");
+    assert_eq!(p3.percent, 0.0);
+    assert_eq!(p3.speed, "-0.00Bps");
+    assert_eq!(p3.eta, "--:--:--");
+
+    // Case 4: MBps unit
+    let line4 = "55.4% 14.25MBps 00:00:45";
+    let p4 = parse_progress_line(line4).expect("Should parse MBps line");
+    assert_eq!(p4.percent, 55.4);
+    assert_eq!(p4.speed, "14.25MBps");
+    assert_eq!(p4.eta, "00:00:45");
+
+    // Case 5: KBps unit with dashed ETA
+    let line5 = "12.1% 850.5KBps --:--:--";
+    let p5 = parse_progress_line(line5).expect("Should parse KBps line");
+    assert_eq!(p5.percent, 12.1);
+    assert_eq!(p5.speed, "850.5KBps");
+    assert_eq!(p5.eta, "--:--:--");
+
+    // Case 6: with ANSI escape codes
+    let line6 = "\x1b[2K 99.9% 2.10MB/s 00:00:01";
+    let p6 = parse_progress_line(line6).expect("Should parse line with ANSI escapes");
+    assert_eq!(p6.percent, 99.9);
+    assert_eq!(p6.speed, "2.10MB/s");
+    assert_eq!(p6.eta, "00:00:01");
+
     // Irrelevant log
-    let line3 = "Writing chunks to disk...";
-    assert!(parse_progress_line(line3).is_none());
+    let line7 = "Writing chunks to disk...";
+    assert!(parse_progress_line(line7).is_none());
+}
+
+#[test]
+fn test_progress_stream_with_carriage_returns() {
+    let output_chunks = vec![
+        "0.0% 0.00Bps --:--:--\r15.5% 2.50MBps 00:01:00\r",
+        "50.0% 5.00MBps 00:00:30\r\n",
+        "100.0% 1.00MBps 00:00:00\n",
+    ];
+
+    let mut line_buf = Vec::new();
+    let mut parsed_progress = Vec::new();
+
+    for chunk in output_chunks {
+        for &b in chunk.as_bytes() {
+            if b == b'\r' || b == b'\n' {
+                if !line_buf.is_empty() {
+                    let line_str = String::from_utf8_lossy(&line_buf);
+                    if let Some(prog) = parse_progress_line(&line_str) {
+                        parsed_progress.push(prog);
+                    }
+                    line_buf.clear();
+                }
+            } else {
+                line_buf.push(b);
+            }
+        }
+    }
+
+    assert_eq!(parsed_progress.len(), 4);
+    assert_eq!(parsed_progress[0].percent, 0.0);
+    assert_eq!(parsed_progress[1].percent, 15.5);
+    assert_eq!(parsed_progress[2].percent, 50.0);
+    assert_eq!(parsed_progress[3].percent, 100.0);
 }

@@ -4,9 +4,13 @@ use serde::{Deserialize, Serialize};
 
 pub use crate::models::{DownloadProgress, DownloadTaskSpec};
 
+static ANSI_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\x1b\[[0-9;?]*[a-zA-Z]").expect("Invalid ANSI regex")
+});
+
 static PROGRESS_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r#"(?:Progress:\s*)?(\d+(?:\.\d+)?)%\s*(?:Speed:\s*)?([0-9.]+\s*[kKmMgG]?[bB]/s)\s*(?:ETA:\s*)?(\d{2}:\d{2}:\d{2})"#
+        r#"(?i)(?:progress:\s*)?(\d+(?:\.\d+)?)%\s*(?:speed:\s*)?(-?[0-9.]+\s*[kmgb]?b(?:/s|ps))\s*(?:eta:\s*)?(\d+:\d{2}:\d{2}|--:--:--)"#
     ).expect("Invalid progress regex")
 });
 
@@ -71,6 +75,9 @@ pub fn build_download_args(spec: &DownloadTaskSpec, config: &DownloadConfig) -> 
     // Clean up temporary chunks
     args.push("--del-after-done".to_string());
 
+    // Disable log file output to avoid permission errors when writing to /usr/bin/Logs
+    args.push("--no-log".to_string());
+
     // Headers
     args.push("--header".to_string());
     args.push("User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string());
@@ -84,7 +91,13 @@ pub fn build_download_args(spec: &DownloadTaskSpec, config: &DownloadConfig) -> 
 }
 
 pub fn parse_progress_line(line: &str) -> Option<DownloadProgress> {
-    if let Some(caps) = PROGRESS_RE.captures(line) {
+    let clean_line = if line.contains('\x1b') {
+        ANSI_RE.replace_all(line, "").to_string()
+    } else {
+        line.to_string()
+    };
+
+    if let Some(caps) = PROGRESS_RE.captures(&clean_line) {
         let percent: f32 = caps.get(1)?.as_str().parse().ok()?;
         let speed = caps.get(2)?.as_str().to_string();
         let eta = caps.get(3)?.as_str().to_string();

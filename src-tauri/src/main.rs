@@ -10,7 +10,7 @@ use bingeget::models::{
     DownloadQueuePayload, EpisodeStatusPayload, ProgressPayload, SeriesMetadata, SystemEnvironment,
 };
 use tauri::{Emitter, State};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
+use tokio::io::{AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Semaphore;
 
@@ -141,11 +141,37 @@ async fn start_download_queue(
                 });
             }
 
-            // Stream stdout for live progress events
+            // Stream stdout for live progress events (split by \r or \n)
             if let Some(stdout) = child.stdout.take() {
-                let mut reader = BufReader::new(stdout).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
-                    if let Some(prog) = parse_progress_line(&line) {
+                let mut reader = BufReader::new(stdout);
+                let mut buf = [0u8; 1024];
+                let mut line_buf = Vec::new();
+                while let Ok(n) = reader.read(&mut buf).await {
+                    if n == 0 {
+                        break;
+                    }
+                    for &b in &buf[..n] {
+                        if b == b'\r' || b == b'\n' {
+                            if !line_buf.is_empty() {
+                                let line_str = String::from_utf8_lossy(&line_buf);
+                                if let Some(prog) = parse_progress_line(&line_str) {
+                                    let _ = app.emit("download-progress", ProgressPayload {
+                                        episode: ep,
+                                        percent: prog.percent,
+                                        speed: prog.speed,
+                                        eta: prog.eta,
+                                    });
+                                }
+                                line_buf.clear();
+                            }
+                        } else {
+                            line_buf.push(b);
+                        }
+                    }
+                }
+                if !line_buf.is_empty() {
+                    let line_str = String::from_utf8_lossy(&line_buf);
+                    if let Some(prog) = parse_progress_line(&line_str) {
                         let _ = app.emit("download-progress", ProgressPayload {
                             episode: ep,
                             percent: prog.percent,
