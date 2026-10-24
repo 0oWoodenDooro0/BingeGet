@@ -14,7 +14,9 @@
     "test:fe": "npm run check:theme && npm run check:types",
     "test:be": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test": "npm run test:fe && npm run test:be",
-    "check": "npm run test"
+    "check": "npm run test",
+    "worktrees": "git worktree list",
+    "worktree:prune": "git worktree prune"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

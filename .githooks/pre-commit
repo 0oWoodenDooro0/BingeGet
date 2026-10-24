@@ -2,6 +2,5 @@
 set -e
 
 echo "🔍 Running pre-commit checks..."
-npm run check:theme
-npm run check:types
+npm run test:fe
 echo "✅ Pre-commit checks passed!"
