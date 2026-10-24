@@ -1,12 +1,14 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use regex::Regex;
 use serde::Deserialize;
+use tokio::sync::RwLock;
 
 use crate::extractors::SiteExtractor;
-use crate::models::{ChannelOption, EpisodeInfo, SeriesMetadata};
+use crate::models::{ChannelOption, EpisodeInfo, SearchResult, SeriesMetadata};
 
 static DRAMA_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"/tv-cn/([a-zA-Z0-9]+)(?:/.*)?"#).expect("Invalid drama ID regex")
@@ -15,6 +17,20 @@ static DRAMA_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
 static EPISODE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"/tv-cn/[^/]+/ep(\d+)\.html"#).expect("Invalid episode regex")
 });
+
+static DRAMA_ENTRY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?s)<li[^>]*cat="(?P<cat>[^"]*)"[^>]*>\s*<a[^>]*href="(?P<href>[^"]+)"[^>]*>(?P<text>.*?)</a>\s*</li>"#)
+        .expect("Invalid drama entry regex")
+});
+
+static YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"\((?P<year>\d{4})\)"#).expect("Invalid year regex")
+});
+
+static CHINAQ_ALL_CACHE: LazyLock<RwLock<Option<(Instant, String)>>> =
+    LazyLock::new(|| RwLock::new(None));
+
+const CACHE_TTL: Duration = Duration::from_secs(1800); // 30 minutes
 
 #[derive(Default, Clone)]
 pub struct ChinaQExtractor {}
@@ -121,6 +137,56 @@ impl ChinaQExtractor {
             channel_id
         ))
     }
+
+    pub fn parse_search_results(&self, html: &str, keyword: &str) -> Result<Vec<SearchResult>> {
+        let kw = keyword.trim().to_lowercase();
+        if kw.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut results = Vec::new();
+
+        for cap in DRAMA_ENTRY_RE.captures_iter(html) {
+            let cat_code = cap.name("cat").map(|m| m.as_str()).unwrap_or("");
+            let href = cap.name("href").map(|m| m.as_str()).unwrap_or("");
+            let text = cap.name("text").map(|m| m.as_str()).unwrap_or("");
+
+            let category = match cat_code {
+                "cn" => Some("陸劇".to_string()),
+                "kr" => Some("韓劇".to_string()),
+                "tw" => Some("台劇".to_string()),
+                "jp" => Some("日劇".to_string()),
+                "hk" => Some("港劇".to_string()),
+                "th" => Some("泰劇".to_string()),
+                other if !other.is_empty() => Some(other.to_string()),
+                _ => None,
+            };
+
+            let year = YEAR_RE.captures(text).and_then(|c| c.name("year").map(|y| y.as_str().to_string()));
+            let title = YEAR_RE.replace_all(text, "").trim().to_string();
+
+            if title.to_lowercase().contains(&kw) {
+                let full_url = if href.starts_with("http") {
+                    href.to_string()
+                } else if href.starts_with('/') {
+                    format!("https://chinaq.fun{}", href)
+                } else {
+                    format!("https://chinaq.fun/{}", href)
+                };
+
+                results.push(SearchResult {
+                    title,
+                    year,
+                    category,
+                    url: full_url,
+                    source_id: self.id().to_string(),
+                    source_name: self.name().to_string(),
+                });
+            }
+        }
+
+        Ok(results)
+    }
 }
 
 #[async_trait]
@@ -194,5 +260,40 @@ impl SiteExtractor for ChinaQExtractor {
             .await?;
 
         self.extract_m3u8_for_channel(&qplays_json, channel)
+    }
+
+    async fn search(&self, client: &reqwest::Client, keyword: &str) -> Result<Vec<SearchResult>> {
+        let kw = keyword.trim();
+        if kw.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Check in-memory cache
+        {
+            let cache_read = CHINAQ_ALL_CACHE.read().await;
+            if let Some((instant, ref html)) = *cache_read {
+                if instant.elapsed() < CACHE_TTL {
+                    return self.parse_search_results(html, kw);
+                }
+            }
+        }
+
+        // Fetch /all.html from ChinaQ
+        let all_url = "https://chinaq.fun/all.html";
+        let html = client
+            .get(all_url)
+            .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        // Update cache
+        {
+            let mut cache_write = CHINAQ_ALL_CACHE.write().await;
+            *cache_write = Some((Instant::now(), html.clone()));
+        }
+
+        self.parse_search_results(&html, kw)
     }
 }

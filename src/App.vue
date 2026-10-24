@@ -7,7 +7,7 @@ import SeriesConfig from './components/SeriesConfig.vue';
 import ChannelSelector from './components/ChannelSelector.vue';
 import EpisodePicker from './components/EpisodePicker.vue';
 import DownloadQueue from './components/DownloadQueue.vue';
-import type { SeriesMetadata, QueueItem, SeriesConfigModel, SystemEnvironment } from './types';
+import type { SeriesMetadata, QueueItem, SeriesConfigModel, SystemEnvironment, SearchResult } from './types';
 
 const loading = ref(false);
 const errorMsg = ref('');
@@ -149,6 +149,14 @@ const handleParse = async (url: string) => {
   }
 };
 
+// Handle series search result selection
+const handleSelectResult = async (result: SearchResult) => {
+  if (result.title) {
+    config.value.customTitle = result.title;
+  }
+  await handleParse(result.url);
+};
+
 // Start download
 const startDownload = async () => {
   if (!config.value.customTitle.trim()) {
@@ -287,8 +295,12 @@ const handleCancel = (ep: number) => {
         <span>{{ successMsg }}</span>
       </div>
 
-      <!-- URL Input Bar -->
-      <UrlBar :loading="loading" @parse="handleParse" />
+      <!-- URL & Search Input Bar -->
+      <UrlBar
+        :loading="loading"
+        @parse="handleParse"
+        @select-result="handleSelectResult"
+      />
 
       <!-- Metadata & Configuration Section -->
       <template v-if="metadata">

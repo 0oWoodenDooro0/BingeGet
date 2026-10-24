@@ -27,6 +27,17 @@ pub struct SeriesMetadata {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/types/generated/")]
+pub struct SearchResult {
+    pub title: String,
+    pub year: Option<String>,
+    pub category: Option<String>,
+    pub url: String,
+    pub source_id: String,
+    pub source_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/types/generated/")]
 pub struct SystemEnvironment {
     pub nm3u8dl_path: Option<String>,
     pub ffmpeg_path: Option<String>,

@@ -107,6 +107,50 @@ fn test_chinaq_extract_m3u8_with_channel_lock() {
     assert!(m3u8_missing.is_err());
 }
 
+#[test]
+fn test_chinaq_parse_search_results() {
+    let extractor = ChinaQExtractor::new();
+    let sample_all_html = r#"
+        <ul class="drama_list">
+            <li cat="cn">
+                <a href="/tv-cn/202312271/">
+                    繁花
+                    (2023)
+                </a>
+            </li>
+            <li cat="kr">
+                <a href="/tv-kr/202625953/">
+                    殭屍校園 第二季 지금 우리 학교는
+                    (2026)
+                </a>
+            </li>
+            <li cat="tw">
+                <a href="/tv-tw/202209121/">
+                    繁星點點
+                </a>
+            </li>
+        </ul>
+    "#;
+
+    // Test match keyword "繁花"
+    let results = extractor.parse_search_results(sample_all_html, "繁花").unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].title, "繁花");
+    assert_eq!(results[0].year.as_deref(), Some("2023"));
+    assert_eq!(results[0].category.as_deref(), Some("陸劇"));
+    assert_eq!(results[0].url, "https://chinaq.fun/tv-cn/202312271/");
+    assert_eq!(results[0].source_id, "chinaq");
+    assert_eq!(results[0].source_name, "ChinaQ");
+
+    // Test partial match "繁" matches both
+    let multi_results = extractor.parse_search_results(sample_all_html, "繁").unwrap();
+    assert_eq!(multi_results.len(), 2);
+
+    // Test no match
+    let empty_results = extractor.parse_search_results(sample_all_html, "不存在的劇名").unwrap();
+    assert!(empty_results.is_empty());
+}
+
 #[tokio::test]
 async fn test_chinaq_live_metadata_and_m3u8_fetch() {
     let extractor = ChinaQExtractor::new();
