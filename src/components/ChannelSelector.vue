@@ -32,7 +32,12 @@ const emit = defineEmits<{
         @change="emit('update:selectedChannel', ($event.target as HTMLSelectElement).value)"
         class="w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-sm text-slate-100 font-medium focus:border-indigo-500 focus:outline-none"
       >
-        <option v-for="c in channels" :key="c.id" :value="c.id">
+        <option
+          v-for="c in channels"
+          :key="c.id"
+          :value="c.id"
+          class="bg-slate-900 text-slate-100"
+        >
           {{ c.name }}
         </option>
       </select>
