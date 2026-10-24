@@ -38,10 +38,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Tauri Linux system dependencies
+      - name: Install Tauri Linux system dependencies and download tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libjavascriptcoregtk-4.1-dev libsoup-3.0-dev ffmpeg curl tar
+          curl -sSL "https://github.com/nilaoda/N_m3u8DL-RE/releases/download/v0.6.0-beta/N_m3u8DL-RE_v0.6.0-beta_linux-x64_20260629.tar.gz" -o /tmp/nm.tar.gz
+          sudo tar -xzf /tmp/nm.tar.gz -C /usr/local/bin/
+          sudo ln -sf /usr/local/bin/N_m3u8DL-RE /usr/local/bin/n-m3u8dl-re
+          sudo ln -sf /usr/local/bin/N_m3u8DL-RE /usr/bin/n-m3u8dl-re
+          sudo chmod +x /usr/local/bin/n-m3u8dl-re /usr/local/bin/N_m3u8DL-RE /usr/bin/n-m3u8dl-re
+          rm -f /tmp/nm.tar.gz
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
