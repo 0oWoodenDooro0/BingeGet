@@ -55,8 +55,8 @@ const handleSearch = async () => {
         {
           title: `${kw} (示範影集)`,
           year: '2024',
-          category: '陸劇',
-          url: 'https://chinaq.fun/tv-cn/202614235/',
+          category: '韓劇',
+          url: 'https://chinaq.fun/tv-kr/202639642/',
           source_id: 'chinaq',
           source_name: 'ChinaQ',
         },
@@ -120,7 +120,7 @@ const handleSelect = (result: SearchResult) => {
             v-model="keyword"
             data-testid="search-input"
             type="text"
-            placeholder="輸入影集名稱或關鍵字（例如：繁花）"
+            placeholder="輸入影集名稱或關鍵字"
             class="w-full rounded-lg border border-slate-700/80 bg-slate-800/80 py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-indigo-500 focus:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             @keyup.enter="handleSearch"
           />
@@ -209,7 +209,7 @@ const handleSelect = (result: SearchResult) => {
             v-model="url"
             data-testid="url-input"
             type="text"
-            placeholder="影集網址（例如：https://chinaq.fun/tv-cn/202614235/）"
+            placeholder="影集網址"
             class="w-full rounded-lg border border-slate-700/80 bg-slate-800/80 py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-indigo-500 focus:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             @keyup.enter="handleParse"
           />

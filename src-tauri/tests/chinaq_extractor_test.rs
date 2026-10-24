@@ -5,8 +5,9 @@ use bingeget::extractors::SiteExtractor;
 fn test_chinaq_can_handle_urls() {
     let extractor = ChinaQExtractor::new();
     assert!(extractor.can_handle("https://chinaq.fun/tv-cn/202614235/"));
-    assert!(extractor.can_handle("https://chinaq.fun/tv-cn/202614235/ep1.html"));
-    assert!(extractor.can_handle("http://chinaq.fun/tv-cn/12345/"));
+    assert!(extractor.can_handle("https://chinaq.fun/tv-kr/202639642/"));
+    assert!(extractor.can_handle("https://chinaq.fun/tv-tw/12345/"));
+    assert!(extractor.can_handle("https://chinaq.fun/tv-jp/99999/ep1.html"));
     assert!(!extractor.can_handle("https://example.com/movie/123"));
 }
 
@@ -21,6 +22,18 @@ fn test_chinaq_extract_drama_id() {
         extractor.extract_drama_id("https://chinaq.fun/tv-cn/202614235/ep12.html").unwrap(),
         "202614235"
     );
+    assert_eq!(
+        extractor.extract_drama_id("https://chinaq.fun/tv-kr/202639642/").unwrap(),
+        "202639642"
+    );
+    assert_eq!(
+        extractor.extract_drama_id("https://chinaq.fun/tv-tw/12345/").unwrap(),
+        "12345"
+    );
+    assert_eq!(
+        extractor.extract_drama_id("https://chinaq.fun/tv-jp/99999/ep3.html").unwrap(),
+        "99999"
+    );
     assert!(extractor.extract_drama_id("https://chinaq.fun/invalid-url").is_err());
 }
 
@@ -29,9 +42,9 @@ fn test_chinaq_parse_episodes_from_html() {
     let extractor = ChinaQExtractor::new();
     let sample_html = r#"
         <div class="category clearfix">
-            <h2><a href="/tv-cn/202614235/ep3.html">花開錦繡 第3集</a></h2>
-            <h2><a href="/tv-cn/202614235/ep1.html">花開錦繡 第1集</a></h2>
-            <h2><a href="/tv-cn/202614235/ep2.html">花開錦繡 第2集</a></h2>
+            <h2><a href="/tv-kr/202639642/ep3.html">Doctor X 第3集</a></h2>
+            <h2><a href="/tv-kr/202639642/ep1.html">Doctor X 第1集</a></h2>
+            <h2><a href="/tv-kr/202639642/ep2.html">Doctor X 第2集</a></h2>
         </div>
     "#;
 
@@ -155,14 +168,14 @@ fn test_chinaq_parse_search_results() {
 async fn test_chinaq_live_metadata_and_m3u8_fetch() {
     let extractor = ChinaQExtractor::new();
     let client = reqwest::Client::new();
-    let url = "https://chinaq.fun/tv-cn/202614235/";
+    let url = "https://chinaq.fun/tv-kr/202639642/";
 
     let metadata = extractor
         .fetch_series_metadata(&client, url)
         .await
-        .expect("Live series metadata should succeed");
+        .expect("Live series metadata should succeed for tv-kr");
 
-    assert_eq!(metadata.drama_id, "202614235");
+    assert_eq!(metadata.drama_id, "202639642");
     assert!(!metadata.episodes.is_empty(), "Should parse episodes");
     assert!(!metadata.channels.is_empty(), "Should parse available channels");
 

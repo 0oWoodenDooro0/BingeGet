@@ -10,12 +10,14 @@ use tokio::sync::RwLock;
 use crate::extractors::SiteExtractor;
 use crate::models::{ChannelOption, EpisodeInfo, SearchResult, SeriesMetadata};
 
-static DRAMA_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"/tv-cn/([a-zA-Z0-9]+)(?:/.*)?"#).expect("Invalid drama ID regex")
+static DRAMA_PATH_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"/(tv-[a-zA-Z0-9]+|[a-zA-Z0-9_-]+)/([a-zA-Z0-9]+)(?:/.*)?"#)
+        .expect("Invalid drama path regex")
 });
 
 static EPISODE_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"/tv-cn/[^/]+/ep(\d+)\.html"#).expect("Invalid episode regex")
+    Regex::new(r#"/(?:tv-[a-zA-Z0-9]+|[a-zA-Z0-9_-]+)/[^/]+/ep(\d+)\.html"#)
+        .expect("Invalid episode regex")
 });
 
 static DRAMA_ENTRY_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -40,13 +42,17 @@ impl ChinaQExtractor {
         Self {}
     }
 
-    pub fn extract_drama_id(&self, url: &str) -> Result<String> {
-        if let Some(cap) = DRAMA_ID_RE.captures(url) {
-            if let Some(id) = cap.get(1) {
-                return Ok(id.as_str().to_string());
+    pub fn extract_category_and_drama_id(&self, url: &str) -> Result<(String, String)> {
+        if let Some(cap) = DRAMA_PATH_RE.captures(url) {
+            if let (Some(cat), Some(id)) = (cap.get(1), cap.get(2)) {
+                return Ok((cat.as_str().to_string(), id.as_str().to_string()));
             }
         }
         Err(anyhow!("Cannot extract drama ID from URL: {}", url))
+    }
+
+    pub fn extract_drama_id(&self, url: &str) -> Result<String> {
+        self.extract_category_and_drama_id(url).map(|(_, id)| id)
     }
 
     pub fn parse_episodes_from_html(&self, html: &str) -> Result<Vec<EpisodeInfo>> {
@@ -204,8 +210,8 @@ impl SiteExtractor for ChinaQExtractor {
     }
 
     async fn fetch_series_metadata(&self, client: &reqwest::Client, url: &str) -> Result<SeriesMetadata> {
-        let drama_id = self.extract_drama_id(url)?;
-        let drama_url = format!("https://chinaq.fun/tv-cn/{}/", drama_id);
+        let (category_slug, drama_id) = self.extract_category_and_drama_id(url)?;
+        let drama_url = format!("https://chinaq.fun/{}/{}/", category_slug, drama_id);
 
         let html = client
             .get(&drama_url)

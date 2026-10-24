@@ -114,7 +114,7 @@ const handleParse = async (url: string) => {
       metadata.value = data;
     } else {
       // Direct parse for preview
-      const dramaIdMatch = url.match(/\/tv-cn\/([a-zA-Z0-9]+)/);
+      const dramaIdMatch = url.match(/\/(?:tv-[a-zA-Z0-9]+|[a-zA-Z0-9_-]+)\/([a-zA-Z0-9]+)/);
       const dramaId = dramaIdMatch ? dramaIdMatch[1] : '202614235';
       
       metadata.value = {
