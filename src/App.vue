@@ -257,7 +257,17 @@ const handleCancel = (ep: number) => {
         <div class="flex items-center gap-2">
           <ShieldAlert class="h-4 w-4 text-amber-400 shrink-0" />
           <span>
-            缺少必要依賴：請安裝 <code class="font-mono">n-m3u8dl-re</code> 與 <code class="font-mono">ffmpeg</code> 以進行下載。
+            缺少必要依賴：請安裝
+            <template v-if="!envInfo.nm3u8dl_path && !envInfo.ffmpeg_path">
+              <code class="font-mono">n-m3u8dl-re</code> 與 <code class="font-mono">ffmpeg</code>
+            </template>
+            <template v-else-if="!envInfo.nm3u8dl_path">
+              <code class="font-mono">n-m3u8dl-re</code>
+            </template>
+            <template v-else-if="!envInfo.ffmpeg_path">
+              <code class="font-mono">ffmpeg</code>
+            </template>
+            以進行下載。
           </span>
         </div>
         <span class="font-medium">
