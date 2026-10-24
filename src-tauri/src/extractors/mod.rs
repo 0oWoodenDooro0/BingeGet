@@ -1,4 +1,5 @@
 pub mod chinaq;
+pub mod text_normalize;
 
 use async_trait::async_trait;
 use crate::models::{SearchResult, SeriesMetadata};
@@ -8,6 +9,8 @@ pub trait SiteExtractor: Send + Sync {
     fn id(&self) -> &'static str;
     fn name(&self) -> &'static str;
     fn can_handle(&self, url: &str) -> bool;
+
+    fn build_episode_referer(&self, category_slug: &str, drama_id: &str, ep_id: &str) -> String;
 
     async fn fetch_series_metadata(&self, client: &reqwest::Client, url: &str) -> anyhow::Result<SeriesMetadata>;
     async fn fetch_m3u8_for_episode(&self, client: &reqwest::Client, drama_id: &str, ep_id: &str, channel: &str) -> anyhow::Result<String>;
