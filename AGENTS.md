@@ -29,8 +29,22 @@
 - **Codebase Search Economy**: Avoid running unconstrained recursive searches (e.g. `grep -rn` without directory limits) that traverse build artifacts or large trees.
   - Always prefer `git grep "<pattern>"` which automatically respects `.gitignore` and ignores `target/`, `node_modules/`, and `dist/`.
   - When using `find` or `grep`, explicitly exclude build directories (e.g. `--exclude-dir={target,node_modules,dist}`).
+- **Non-Interactive GitHub CLI Guidelines**:
+  - When invoking `gh` commands in automated or non-interactive environments, always pass explicit arguments (e.g. `gh run view <run-id> --job=<job-id>` or `gh run list --limit 1 --json databaseId`). Never execute bare commands like `gh run view` or `gh run rerun` that trigger interactive TUI selection menus, which cause agent command timeouts.
+- **CI Polling & Wait Cadence**:
+  - Understand project build durations: Frontend checks take ~15-20s, whereas Backend Rust + Tauri builds take ~1.5-2.5 minutes on GitHub Actions.
+  - Avoid tight polling loops (<15s) when checking CI status. Use appropriate background sleep durations (e.g. 20s-30s) or scheduler triggers to minimize redundant process invocations and token consumption.
 
-## 4. Testing & Extractor Principles
+## 4. Architecture & Component Modularity
+
+- **Single Responsibility Principle for UI Components**:
+  - Compound UI components (e.g. those supporting dual input modes or complex dropdowns) must decouple input/control coordination from list/state presentation.
+  - Separate stateful or heavy render trees (such as search result cards, loading skeleton states, and empty states) into focused child components (e.g. `SearchResultList.vue` alongside `UrlBar.vue`). This prevents divergent change and enables isolated unit testing of state transitions.
+- **Seam-Driven Referer & Extractor Boundaries**:
+  - Avoid hardcoding site-specific URL patterns, query formats, or referer paths outside extractor modules.
+  - All download engines, queue dispatchers, and IPC commands must query the corresponding `SiteExtractor` method (e.g. `build_episode_referer`) to obtain canonical network parameters.
+
+## 5. Testing & Extractor Principles
 
 - **SiteExtractor URL Matrix Coverage**: When implementing or updating URL parsing or extractor logic (e.g. `ChinaQExtractor`), unit tests must verify against a multi-category URL matrix (covering all supported region slugs like `tv-cn`, `tv-kr`, `tv-tw`, `tv-jp`, `tv-hk`), rather than only testing a single default category.
 - **Focus on Behavioral Logic and State Transitions**: Tests must verify public interfaces and critical behaviors (such as event emission and payloads, state transitions, conditional button disabling/enabling, external API / Plugin calls, and cancellation/error handling) rather than static DOM content or hardcoded copy.
