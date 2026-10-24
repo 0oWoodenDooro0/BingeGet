@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { Download, AlertTriangle, CheckCircle2, ShieldCheck, ShieldAlert } from 'lucide-vue-next';
+import { Download, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-vue-next';
 import HeaderBar from './components/HeaderBar.vue';
 import UrlBar from './components/UrlBar.vue';
 import SeriesConfig from './components/SeriesConfig.vue';
@@ -141,7 +141,7 @@ const handleParse = async (url: string) => {
       selectedEpisodes.value = metadata.value.episodes.map(e => e.ep_number);
     }
 
-    successMsg.value = `成功解析影集，共找到 ${metadata.value?.episodes.length || 0} 集！請手動填寫自訂劇名後開始下載。`;
+    successMsg.value = `解析成功，共 ${metadata.value?.episodes.length || 0} 集。請確認劇名與集數後即可開始下載。`;
   } catch (err: unknown) {
     errorMsg.value = `解析失敗: ${getErrorMessage(err)}`;
   } finally {
@@ -152,12 +152,12 @@ const handleParse = async (url: string) => {
 // Start download
 const startDownload = async () => {
   if (!config.value.customTitle.trim()) {
-    errorMsg.value = '請填寫自訂劇名，避免儲存為未命名或爬蟲雜訊檔案！';
+    errorMsg.value = '請輸入劇名！';
     return;
   }
 
   if (selectedEpisodes.value.length === 0) {
-    errorMsg.value = '請至少勾選一集！';
+    errorMsg.value = '請至少選擇一集！';
     return;
   }
 
@@ -252,21 +252,26 @@ const handleCancel = (ep: number) => {
     <HeaderBar />
 
     <main class="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 space-y-5">
-      <!-- System Environment Status Banner -->
-      <div v-if="envInfo" class="flex items-center justify-between rounded-lg border px-3.5 py-2 text-xs" :class="[
-        envInfo.is_ready
-          ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-300'
-          : 'border-amber-500/30 bg-amber-950/20 text-amber-300'
-      ]">
+      <!-- Dependency Alert Banner (only visible if environment has missing dependencies) -->
+      <div v-if="envInfo && !envInfo.is_ready" class="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-950/20 px-3.5 py-2 text-xs text-amber-300">
         <div class="flex items-center gap-2">
-          <ShieldCheck v-if="envInfo.is_ready" class="h-4 w-4 text-emerald-400" />
-          <ShieldAlert v-else class="h-4 w-4 text-amber-400" />
+          <ShieldAlert class="h-4 w-4 text-amber-400 shrink-0" />
           <span>
-            環境診斷：n-m3u8dl-re: <code class="font-mono">{{ envInfo.nm3u8dl_path || '未找到' }}</code> | ffmpeg: <code class="font-mono">{{ envInfo.ffmpeg_path || '未找到' }}</code>
+            缺少必要依賴：請安裝
+            <template v-if="!envInfo.nm3u8dl_path && !envInfo.ffmpeg_path">
+              <code class="font-mono">n-m3u8dl-re</code> 與 <code class="font-mono">ffmpeg</code>
+            </template>
+            <template v-else-if="!envInfo.nm3u8dl_path">
+              <code class="font-mono">n-m3u8dl-re</code>
+            </template>
+            <template v-else-if="!envInfo.ffmpeg_path">
+              <code class="font-mono">ffmpeg</code>
+            </template>
+            以進行下載。
           </span>
         </div>
         <span class="font-medium">
-          {{ envInfo.is_ready ? '核心依賴就緒' : '缺少外部依賴' }}
+          環境未就緒
         </span>
       </div>
 

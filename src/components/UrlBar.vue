@@ -21,7 +21,7 @@ const handleParse = () => {
 <template>
   <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-4 shadow-sm backdrop-blur-sm">
     <label class="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-      影集網址 (支援 ChinaQ 等站點)
+      影集網址
     </label>
     <div class="flex gap-2">
       <div class="relative flex-1">
