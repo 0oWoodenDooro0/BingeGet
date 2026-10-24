@@ -12,7 +12,7 @@
     - To move the current thread into a worktree: call `t3_worktree_handoff`.
     - To launch a new agent/thread in a worktree: call `t3_thread_launch` with `workspaceStrategy: { "type": "worktree", "branch": "...", "startFromOrigin": false }`.
     - Do NOT manually run `git worktree add` in shell prompts; let T3 bind the workspace and permissions automatically.
-  - T3 Code project script `setup` (`npm run setup`) is configured with `runOnWorktreeCreate: true` to automatically install dependencies and configure git hooks upon worktree creation.
+  - **Setup Script & Dependency Fail-Safe**: T3 Code project script `setup` (`npm run setup`) is configured with `runOnWorktreeCreate: true`. However, if the project setup script fails, gets skipped, or `node_modules` is absent (e.g. `vue-tsc: command not found`), the agent must run `npm run setup` (or `npm install`) as the first step before running checks or tests.
 
 ## 2. Quality & Validation Commands
 
@@ -24,10 +24,18 @@
 - **Theme Guardrails**: Native `<select>` and `<option>` elements in WebView require `color-scheme: dark` and explicit dark background classes (`bg-slate-900 text-slate-100`) to avoid white background artifacts.
 - **Lockfile Synchronization**: Always ensure `package-lock.json` is synchronized with `package.json` (`npm run check:lockfile`). Modifying `package.json` without updating the lockfile will fail pre-commit and CI.
 
-## 3. Testing Principles
+## 3. Tool Economy & Search Best Practices
 
+- **Codebase Search Economy**: Avoid running unconstrained recursive searches (e.g. `grep -rn` without directory limits) that traverse build artifacts or large trees.
+  - Always prefer `git grep "<pattern>"` which automatically respects `.gitignore` and ignores `target/`, `node_modules/`, and `dist/`.
+  - When using `find` or `grep`, explicitly exclude build directories (e.g. `--exclude-dir={target,node_modules,dist}`).
+
+## 4. Testing & Extractor Principles
+
+- **SiteExtractor URL Matrix Coverage**: When implementing or updating URL parsing or extractor logic (e.g. `ChinaQExtractor`), unit tests must verify against a multi-category URL matrix (covering all supported region slugs like `tv-cn`, `tv-kr`, `tv-tw`, `tv-jp`, `tv-hk`), rather than only testing a single default category.
 - **Focus on Behavioral Logic and State Transitions**: Tests must verify public interfaces and critical behaviors (such as event emission and payloads, state transitions, conditional button disabling/enabling, external API / Plugin calls, and cancellation/error handling) rather than static DOM content or hardcoded copy.
 - **Strictly Prohibit Non-Logical Text Assertions**:
   - Do not write non-logical tests asserting static text, placeholders, or template labels.
   - Assertions on static copy contain no business logic and are fragile to minor copy tweaks.
   - Test value lies in verifying functional correctness and boundary conditions, not literal copy.
+- **UI Input Placeholder Convention**: Input placeholders should be direct and concise (e.g. `輸入影集名稱或關鍵字` or `影集網址`), avoiding verbose examples or prefixes like `例如：...`.
