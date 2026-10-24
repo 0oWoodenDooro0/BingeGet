@@ -64,6 +64,7 @@ async fn start_download_queue(
     let save_dir = req.save_dir;
     let threads = req.threads;
     let binary_path = req.binary_path;
+    let category_slug = req.category_slug.unwrap_or_else(|| "tv-cn".to_string());
 
     for ep in req.episodes {
         let app = app.clone();
@@ -75,6 +76,7 @@ async fn start_download_queue(
         let custom_title = custom_title.clone();
         let save_dir = save_dir.clone();
         let binary_path = binary_path.clone();
+        let category_slug = category_slug.clone();
 
         tokio::spawn(async move {
             let _permit = match sem.acquire().await {
@@ -108,7 +110,7 @@ async fn start_download_queue(
                 season,
                 episode: ep,
                 save_dir,
-                referer: format!("https://chinaq.fun/tv-cn/{}/{}.html", drama_id, ep_id),
+                referer: format!("https://chinaq.fun/{}/{}/{}.html", category_slug, drama_id, ep_id),
             };
 
             let config = DownloadConfig {

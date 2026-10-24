@@ -119,6 +119,7 @@ const handleParse = async (url: string) => {
       
       metadata.value = {
         drama_id: dramaId,
+        category_slug: 'tv-cn',
         episodes: Array.from({ length: 36 }, (_, i) => ({
           ep_number: i + 1,
           ep_id: `ep${i + 1}`,
@@ -171,6 +172,7 @@ const startDownload = async () => {
 
   errorMsg.value = '';
 
+  const categorySlug = metadata.value?.category_slug || 'tv-cn';
   const newItems: QueueItem[] = selectedEpisodes.value.map((ep, idx) => ({
     id: idx + 1,
     spec: {
@@ -179,7 +181,7 @@ const startDownload = async () => {
       season: config.value.season,
       episode: ep,
       save_dir: config.value.saveDir,
-      referer: `https://chinaq.fun/tv-cn/${metadata.value?.drama_id}/ep${ep}.html`,
+      referer: `https://chinaq.fun/${categorySlug}/${metadata.value?.drama_id}/ep${ep}.html`,
     },
     state: { type: 'Queued' },
   }));
@@ -192,6 +194,7 @@ const startDownload = async () => {
       await invoke('start_download_queue', {
         req: {
           drama_id: metadata.value?.drama_id,
+          category_slug: categorySlug,
           channel_id: selectedChannel.value,
           episodes: selectedEpisodes.value,
           custom_title: config.value.customTitle.trim(),

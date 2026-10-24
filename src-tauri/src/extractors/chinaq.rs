@@ -242,6 +242,7 @@ impl SiteExtractor for ChinaQExtractor {
 
         Ok(SeriesMetadata {
             drama_id,
+            category_slug: Some(category_slug),
             episodes,
             channels,
         })
@@ -255,7 +256,7 @@ impl SiteExtractor for ChinaQExtractor {
         channel: &str,
     ) -> Result<String> {
         let qplays_url = format!("https://chinaq.fun/qplays/{}/{}", drama_id, ep_id);
-        let referer = format!("https://chinaq.fun/tv-cn/{}/{}.html", drama_id, ep_id);
+        let referer = format!("https://chinaq.fun/qplays/{}/{}", drama_id, ep_id);
         let qplays_json = client
             .get(&qplays_url)
             .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")

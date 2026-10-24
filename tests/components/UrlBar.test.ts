@@ -89,7 +89,7 @@ describe('UrlBar.vue', () => {
     expect(searchBtn.attributes('disabled')).toBeDefined();
   });
 
-  it('renders search results and emits select-result when a result is clicked', async () => {
+  it('renders search results, emits select-result, and syncs url when a result is clicked', async () => {
     const mockResults: SearchResult[] = [
       {
         title: '繁花',
@@ -137,6 +137,43 @@ describe('UrlBar.vue', () => {
 
     expect(wrapper.emitted('select-result')).toBeTruthy();
     expect(wrapper.emitted('select-result')![0]).toEqual([mockResults[0]]);
+
+    // Switch to URL tab and verify url is synchronized
+    const urlTab = wrapper.find('[data-testid="tab-url"]');
+    await urlTab.trigger('click');
+    const urlInput = wrapper.find<HTMLInputElement>('[data-testid="url-input"]');
+    expect(urlInput.element.value).toBe(mockResults[0].url);
+  });
+
+  it('displays loading skeleton while search is in flight', async () => {
+    let resolvePromise!: (results: SearchResult[]) => void;
+    const searchPromise = new Promise<SearchResult[]>((resolve) => {
+      resolvePromise = resolve;
+    });
+
+    const wrapper = mount(UrlBar, {
+      props: {
+        loading: false,
+        onSearch: () => searchPromise,
+      },
+    });
+
+    const searchTab = wrapper.find('[data-testid="tab-search"]');
+    await searchTab.trigger('click');
+
+    const searchInput = wrapper.find('[data-testid="search-input"]');
+    await searchInput.setValue('繁花');
+
+    const searchBtn = wrapper.find('[data-testid="search-btn"]');
+    await searchBtn.trigger('click');
+
+    // Skeleton should be visible
+    expect(wrapper.find('[data-testid="search-skeleton"]').exists()).toBe(true);
+
+    resolvePromise([]);
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="search-skeleton"]').exists()).toBe(false);
+    });
   });
 
   it('shows empty result indicator when search yields no results', async () => {

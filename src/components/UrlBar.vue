@@ -70,6 +70,7 @@ const handleSearch = async () => {
 };
 
 const handleSelect = (result: SearchResult) => {
+  url.value = result.url;
   emit('select-result', result);
 };
 </script>
@@ -144,8 +145,24 @@ const handleSelect = (result: SearchResult) => {
         <span>{{ searchError }}</span>
       </div>
 
+      <!-- Loading Skeleton State -->
+      <div v-if="searching" data-testid="search-skeleton" class="mt-2 space-y-1.5">
+        <div
+          v-for="i in 3"
+          :key="i"
+          class="flex animate-pulse items-center justify-between rounded-lg border border-slate-800 bg-slate-800/30 p-3"
+        >
+          <div class="flex items-center gap-3">
+            <div class="h-4 w-32 rounded bg-slate-700/60"></div>
+            <div class="h-4 w-12 rounded bg-slate-800"></div>
+            <div class="h-4 w-12 rounded bg-slate-800"></div>
+          </div>
+          <div class="h-4 w-8 rounded bg-slate-800"></div>
+        </div>
+      </div>
+
       <!-- Search Results List -->
-      <div v-if="results.length > 0" class="mt-2 space-y-1.5 max-h-72 overflow-y-auto pr-1">
+      <div v-else-if="results.length > 0" class="mt-2 space-y-1.5 max-h-72 overflow-y-auto pr-1">
         <div
           v-for="(item, idx) in results"
           :key="idx"
