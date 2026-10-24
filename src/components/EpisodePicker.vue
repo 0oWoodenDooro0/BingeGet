@@ -54,7 +54,7 @@ const applyRange = () => {
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
       <div class="flex items-center gap-2">
         <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          集數勾選 (已選 {{ selectedEpisodes.length }} / {{ episodes.length }} 集)
+          集數選擇 (已選 {{ selectedEpisodes.length }} / {{ episodes.length }} 集)
         </span>
       </div>
 

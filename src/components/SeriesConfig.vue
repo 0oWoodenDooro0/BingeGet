@@ -26,7 +26,7 @@ const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesC
       <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
         <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
           <Layers class="h-4 w-4 text-indigo-400" />
-          影集命名與媒體庫規範 (Jellyfin / Plex)
+          影集設定
         </h2>
         <span v-if="totalEpisodes > 0" class="text-xs font-medium text-slate-400">
           共 {{ totalEpisodes }} 集
@@ -36,7 +36,7 @@ const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesC
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2">
           <label class="block text-xs text-slate-400 mb-1">
-            自訂劇名 <span class="text-rose-400">* (手動輸入，避免爬蟲雜訊)</span>
+            自訂劇名 <span class="text-rose-400">*</span>
           </label>
           <input
             :value="config.customTitle"
@@ -63,13 +63,10 @@ const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesC
         </div>
       </div>
 
-      <div class="text-[11px] text-slate-500 font-mono bg-slate-950/40 px-2.5 py-1.5 rounded border border-slate-800/50">
-        預計命名範例：
-        <span v-if="config.customTitle.trim()" class="text-indigo-400 font-medium">
-          {{ config.customTitle.trim() }} - S{{ config.season < 10 ? '0' + config.season : config.season }}E01.mp4
-        </span>
-        <span v-else class="text-amber-400/80 italic">
-          (請填寫劇名以產生檔案名稱)
+      <div class="text-[11px] text-slate-400 font-mono bg-slate-950/40 px-2.5 py-1.5 rounded border border-slate-800/50 flex items-center gap-1.5">
+        <span class="text-slate-500">命名範例：</span>
+        <span class="text-indigo-400 font-medium truncate">
+          {{ config.customTitle.trim() || '劇名' }} - S{{ config.season < 10 ? '0' + config.season : config.season }}E01.mp4
         </span>
       </div>
     </div>
@@ -79,7 +76,7 @@ const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesC
       <div class="flex items-center justify-between border-b border-slate-800/80 pb-2">
         <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
           <Sliders class="h-4 w-4 text-indigo-400" />
-          儲存目錄與併發效能
+          下載設定
         </h2>
       </div>
 
@@ -124,17 +121,17 @@ const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesC
 
         <div>
           <div class="flex justify-between text-xs text-slate-400 mb-1">
-            <span>同時下載集數 (防封限制)</span>
-            <span class="text-indigo-400 font-medium">{{ config.maxConcurrent }} 集並發</span>
+            <span>同時下載集數</span>
+            <span class="text-indigo-400 font-medium">{{ config.maxConcurrent }} 集</span>
           </div>
           <select
             :value="config.maxConcurrent"
             @change="updateField('maxConcurrent', parseInt(($event.target as HTMLSelectElement).value))"
             class="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
           >
-            <option :value="1">1 集 (最安全防封)</option>
-            <option :value="2">2 集 (推薦平衡)</option>
-            <option :value="3">3 集 (高速下載)</option>
+            <option :value="1">1 集</option>
+            <option :value="2">2 集</option>
+            <option :value="3">3 集</option>
           </select>
         </div>
       </div>
