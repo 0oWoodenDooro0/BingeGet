@@ -7,6 +7,7 @@ use regex::Regex;
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
+use super::text_normalize::match_keyword;
 use crate::extractors::SiteExtractor;
 use crate::models::{ChannelOption, EpisodeInfo, SearchResult, SeriesMetadata};
 
@@ -48,25 +49,57 @@ impl ChinaQExtractor {
                 return Ok((cat.as_str().to_string(), id.as_str().to_string()));
             }
         }
-        Err(anyhow!("Cannot extract drama ID from URL: {}", url))
+        Err(anyhow!("Cannot extract category and drama ID from URL: {}", url))
     }
 
     pub fn extract_drama_id(&self, url: &str) -> Result<String> {
-        self.extract_category_and_drama_id(url).map(|(_, id)| id)
+        let (_, drama_id) = self.extract_category_and_drama_id(url)?;
+        Ok(drama_id)
+    }
+
+    pub fn build_episode_referer(&self, category_slug: &str, drama_id: &str, ep_id: &str) -> String {
+        let clean_ep = if ep_id.starts_with("ep") {
+            ep_id.to_string()
+        } else {
+            format!("ep{}", ep_id)
+        };
+        let clean_category = if category_slug.is_empty() {
+            "tv-cn"
+        } else {
+            category_slug
+        };
+        format!("https://chinaq.fun/{}/{}/{}.html", clean_category, drama_id, clean_ep)
+    }
+
+    pub fn category_label_from_code(cat_code: &str) -> Option<String> {
+        match cat_code {
+            "cn" => Some("陸劇".to_string()),
+            "kr" => Some("韓劇".to_string()),
+            "tw" => Some("台劇".to_string()),
+            "jp" => Some("日劇".to_string()),
+            "hk" => Some("港劇".to_string()),
+            "th" => Some("泰劇".to_string()),
+            "anime" | "acg" => Some("動漫".to_string()),
+            "movie" => Some("電影".to_string()),
+            other if !other.is_empty() => Some(other.to_string()),
+            _ => None,
+        }
     }
 
     pub fn parse_episodes_from_html(&self, html: &str) -> Result<Vec<EpisodeInfo>> {
-        let mut seen = HashSet::new();
         let mut episodes = Vec::new();
+        let mut seen = HashSet::new();
 
         for cap in EPISODE_RE.captures_iter(html) {
-            if let Some(num_str) = cap.get(1) {
-                let num_str = num_str.as_str();
-                if let Ok(num) = num_str.parse::<u32>() {
-                    if seen.insert(num) {
+            if let Some(ep_num_match) = cap.get(1) {
+                let ep_num_str = ep_num_match.as_str();
+                if let Ok(ep_num) = ep_num_str.parse::<u32>() {
+                    let ep_id = format!("ep{}", ep_num);
+                    if !seen.contains(&ep_id) {
+                        seen.insert(ep_id.clone());
                         episodes.push(EpisodeInfo {
-                            ep_number: num,
-                            ep_id: format!("ep{}", num),
+                            ep_number: ep_num,
+                            ep_id,
                             available_channels: Vec::new(),
                         });
                     }
@@ -145,8 +178,7 @@ impl ChinaQExtractor {
     }
 
     pub fn parse_search_results(&self, html: &str, keyword: &str) -> Result<Vec<SearchResult>> {
-        let kw = keyword.trim().to_lowercase();
-        if kw.is_empty() {
+        if keyword.trim().is_empty() {
             return Ok(Vec::new());
         }
 
@@ -157,21 +189,11 @@ impl ChinaQExtractor {
             let href = cap.name("href").map(|m| m.as_str()).unwrap_or("");
             let text = cap.name("text").map(|m| m.as_str()).unwrap_or("");
 
-            let category = match cat_code {
-                "cn" => Some("陸劇".to_string()),
-                "kr" => Some("韓劇".to_string()),
-                "tw" => Some("台劇".to_string()),
-                "jp" => Some("日劇".to_string()),
-                "hk" => Some("港劇".to_string()),
-                "th" => Some("泰劇".to_string()),
-                other if !other.is_empty() => Some(other.to_string()),
-                _ => None,
-            };
-
+            let category = Self::category_label_from_code(cat_code);
             let year = YEAR_RE.captures(text).and_then(|c| c.name("year").map(|y| y.as_str().to_string()));
             let title = YEAR_RE.replace_all(text, "").trim().to_string();
 
-            if title.to_lowercase().contains(&kw) {
+            if match_keyword(&title, keyword) {
                 let full_url = if href.starts_with("http") {
                     href.to_string()
                 } else if href.starts_with('/') {
@@ -207,6 +229,10 @@ impl SiteExtractor for ChinaQExtractor {
 
     fn can_handle(&self, url: &str) -> bool {
         url.contains("chinaq.fun")
+    }
+
+    fn build_episode_referer(&self, category_slug: &str, drama_id: &str, ep_id: &str) -> String {
+        self.build_episode_referer(category_slug, drama_id, ep_id)
     }
 
     async fn fetch_series_metadata(&self, client: &reqwest::Client, url: &str) -> Result<SeriesMetadata> {

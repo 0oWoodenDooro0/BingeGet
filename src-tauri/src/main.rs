@@ -7,6 +7,7 @@ use bingeget::commands::{
     search_series_core,
 };
 use bingeget::engine::downloader::{build_download_args, parse_progress_line, DownloadConfig, DownloadTaskSpec};
+use bingeget::extractors::chinaq::ChinaQExtractor;
 use bingeget::models::{
     DownloadQueuePayload, EpisodeStatusPayload, ProgressPayload, SearchResult, SeriesMetadata,
     SystemEnvironment,
@@ -30,14 +31,6 @@ async fn parse_series_metadata(
 }
 
 #[tauri::command]
-async fn search_series(
-    client: State<'_, reqwest::Client>,
-    keyword: String,
-) -> Result<Vec<SearchResult>, String> {
-    search_series_core(&client, &keyword).await
-}
-
-#[tauri::command]
 async fn fetch_episode_m3u8(
     client: State<'_, reqwest::Client>,
     drama_id: String,
@@ -45,6 +38,14 @@ async fn fetch_episode_m3u8(
     channel: String,
 ) -> Result<String, String> {
     fetch_episode_m3u8_core(&client, &drama_id, &ep_id, &channel).await
+}
+
+#[tauri::command]
+async fn search_series(
+    client: State<'_, reqwest::Client>,
+    keyword: String,
+) -> Result<Vec<SearchResult>, String> {
+    search_series_core(&client, &keyword).await
 }
 
 #[tauri::command]
@@ -66,6 +67,8 @@ async fn start_download_queue(
     let binary_path = req.binary_path;
     let category_slug = req.category_slug.unwrap_or_else(|| "tv-cn".to_string());
 
+    let extractor = ChinaQExtractor::new();
+
     for ep in req.episodes {
         let app = app.clone();
         let client = client.clone();
@@ -77,6 +80,7 @@ async fn start_download_queue(
         let save_dir = save_dir.clone();
         let binary_path = binary_path.clone();
         let category_slug = category_slug.clone();
+        let referer = extractor.build_episode_referer(&category_slug, &drama_id, &format!("ep{}", ep));
 
         tokio::spawn(async move {
             let _permit = match sem.acquire().await {
@@ -110,7 +114,7 @@ async fn start_download_queue(
                 season,
                 episode: ep,
                 save_dir,
-                referer: format!("https://chinaq.fun/{}/{}/{}.html", category_slug, drama_id, ep_id),
+                referer,
             };
 
             let config = DownloadConfig {
