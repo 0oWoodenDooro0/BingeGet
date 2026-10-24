@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
+    "setup": "npm install && git config core.hooksPath .githooks 2>/dev/null || true",
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
     "typegen": "cargo test --manifest-path src-tauri/Cargo.toml --test export_schema_test",
     "check:theme": "node scripts/check-theme-guardrails.mjs",

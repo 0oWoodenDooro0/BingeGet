@@ -2,7 +2,7 @@
 
 ## 1. T3 Code Worktree & Branch Management
 
-- **Sandbox Boundary**: Do NOT attempt to run shell commands or `cd` into paths under `~/.t3-desktop/worktrees/...`. The agent workspace sandbox will block access (`denied by pre-tool hook`).
+- **Sandbox Boundary**: Do NOT attempt to run shell commands or `cd` into paths outside the active workspace directory (such as other worktrees or the root repo if running in a worktree). The agent workspace sandbox will block access (`denied by pre-tool hook`). Always execute commands relative to the current working tree.
 - **Resolving Branch Lock in Root**:
   - If a branch cannot be checked out because an external worktree is using it (`fatal: '<branch>' is already used by worktree at ...`):
     - Inspect existing worktrees: `npm run worktrees` (or `git worktree list`).
@@ -12,10 +12,13 @@
     - To move the current thread into a worktree: call `t3_worktree_handoff`.
     - To launch a new agent/thread in a worktree: call `t3_thread_launch` with `workspaceStrategy: { "type": "worktree", "branch": "...", "startFromOrigin": false }`.
     - Do NOT manually run `git worktree add` in shell prompts; let T3 bind the workspace and permissions automatically.
+  - T3 Code project script `setup` (`npm run setup`) is configured with `runOnWorktreeCreate: true` to automatically install dependencies and configure git hooks upon worktree creation.
 
 ## 2. Quality & Validation Commands
 
+- **Setup & Hooks**: `npm run setup` (installs node modules and wires `.githooks`).
 - **Frontend checks**: `npm run test:fe` (runs theme guardrails check + `vue-tsc --noEmit`).
 - **Backend checks**: `npm run test:be` (`cargo test --manifest-path src-tauri/Cargo.toml`).
 - **Full test suite**: `npm test` or `npm run check`.
+- **Pre-commit**: Automatically validates theme guardrails, TypeScript types, and ts-rs schema generation (`export_schema_test`).
 - **Theme Guardrails**: Native `<select>` and `<option>` elements in WebView require `color-scheme: dark` and explicit dark background classes (`bg-slate-900 text-slate-100`) to avoid white background artifacts.

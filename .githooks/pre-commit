@@ -3,4 +3,5 @@ set -e
 
 echo "🔍 Running pre-commit checks..."
 npm run test:fe
+cargo test --manifest-path src-tauri/Cargo.toml --test export_schema_test
 echo "✅ Pre-commit checks passed!"
