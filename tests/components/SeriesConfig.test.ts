@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import SeriesConfig from '../../src/components/SeriesConfig.vue';
 import type { SeriesConfigModel } from '../../src/types';
 import * as dialog from '@tauri-apps/plugin-dialog';
@@ -32,16 +32,15 @@ describe('SeriesConfig.vue', () => {
       },
     });
 
-    const browseBtn = wrapper.find('button');
+    const browseBtn = wrapper.find('[data-testid="browse-dir-btn"]');
     await browseBtn.trigger('click');
+    await flushPromises();
 
     expect(mockedOpen).toHaveBeenCalledWith(
       expect.objectContaining({
         directory: true,
       })
     );
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(wrapper.emitted('update:config')).toBeTruthy();
     const emittedConfig = wrapper.emitted('update:config')![0][0] as SeriesConfigModel;
@@ -59,10 +58,9 @@ describe('SeriesConfig.vue', () => {
       },
     });
 
-    const browseBtn = wrapper.find('button');
+    const browseBtn = wrapper.find('[data-testid="browse-dir-btn"]');
     await browseBtn.trigger('click');
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushPromises();
 
     expect(mockedOpen).toHaveBeenCalled();
     expect(wrapper.emitted('update:config')).toBeFalsy();
@@ -76,7 +74,7 @@ describe('SeriesConfig.vue', () => {
       },
     });
 
-    const titleInput = wrapper.find('input[type="text"]');
+    const titleInput = wrapper.find('[data-testid="series-title-input"]');
     await titleInput.setValue('慶餘年');
 
     expect(wrapper.emitted('update:config')).toBeTruthy();

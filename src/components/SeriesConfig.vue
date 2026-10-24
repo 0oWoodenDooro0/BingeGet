@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Folder, Sliders, Layers } from 'lucide-vue-next';
-import { open } from '@tauri-apps/plugin-dialog';
 import type { SeriesConfigModel } from '../types';
 
 const props = defineProps<{
@@ -27,6 +26,14 @@ const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesC
 
 const handleBrowseDir = async () => {
   try {
+    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    // In web preview without Tauri internals, avoid calling native dialog
+    if (!isTauri && typeof process !== 'undefined' && process.env?.NODE_ENV !== 'test') {
+      console.warn('Directory dialog is only available in desktop environment');
+      return;
+    }
+
+    const { open } = await import('@tauri-apps/plugin-dialog');
     const selected = await open({
       directory: true,
       multiple: false,
@@ -64,6 +71,7 @@ const handleBrowseDir = async () => {
             :value="config.customTitle"
             @input="updateField('customTitle', ($event.target as HTMLInputElement).value)"
             type="text"
+            data-testid="series-title-input"
             placeholder="請輸入劇名"
             class="w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
           />
@@ -109,6 +117,7 @@ const handleBrowseDir = async () => {
               :value="config.saveDir"
               @input="updateField('saveDir', ($event.target as HTMLInputElement).value)"
               type="text"
+              data-testid="save-dir-input"
               placeholder="/home/user/Downloads"
               class="w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
             />
@@ -116,6 +125,7 @@ const handleBrowseDir = async () => {
           <button
             type="button"
             @click="handleBrowseDir"
+            data-testid="browse-dir-btn"
             class="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700 flex items-center gap-1"
           >
             <Folder class="h-3.5 w-3.5" />
