@@ -11,6 +11,12 @@ const emit = defineEmits<{
   (e: 'update:config', val: SeriesConfigModel): void;
 }>();
 
+const concurrentOptions = [
+  { value: 1, label: '1 集 (最安全防封)' },
+  { value: 2, label: '2 集 (推薦平衡)' },
+  { value: 3, label: '3 集 (高速下載)' },
+];
+
 const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesConfigModel[K]) => {
   emit('update:config', {
     ...props.config,
@@ -130,11 +136,16 @@ const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesC
           <select
             :value="config.maxConcurrent"
             @change="updateField('maxConcurrent', parseInt(($event.target as HTMLSelectElement).value))"
-            class="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+            class="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
           >
-            <option :value="1">1 集 (最安全防封)</option>
-            <option :value="2">2 集 (推薦平衡)</option>
-            <option :value="3">3 集 (高速下載)</option>
+            <option
+              v-for="opt in concurrentOptions"
+              :key="opt.value"
+              :value="opt.value"
+              class="bg-slate-900 text-slate-100"
+            >
+              {{ opt.label }}
+            </option>
           </select>
         </div>
       </div>
