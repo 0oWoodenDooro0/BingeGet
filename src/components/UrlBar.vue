@@ -10,7 +10,7 @@ const emit = defineEmits<{
   (e: 'parse', url: string): void;
 }>();
 
-const url = ref('https://chinaq.fun/tv-cn/202614235/');
+const url = ref('');
 
 const handleParse = () => {
   if (!url.value.trim() || props.loading) return;
@@ -31,7 +31,7 @@ const handleParse = () => {
         <input
           v-model="url"
           type="text"
-          placeholder="貼上影集網址，例如 https://chinaq.fun/tv-cn/202614235/"
+          placeholder="影集網址"
           class="w-full rounded-lg border border-slate-700/80 bg-slate-800/80 py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-indigo-500 focus:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           @keyup.enter="handleParse"
         />
