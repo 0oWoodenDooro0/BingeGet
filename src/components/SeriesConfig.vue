@@ -130,11 +130,11 @@ const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesC
           <select
             :value="config.maxConcurrent"
             @change="updateField('maxConcurrent', parseInt(($event.target as HTMLSelectElement).value))"
-            class="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
+            class="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
           >
-            <option :value="1">1 集 (最安全防封)</option>
-            <option :value="2">2 集 (推薦平衡)</option>
-            <option :value="3">3 集 (高速下載)</option>
+            <option :value="1" class="bg-slate-900 text-slate-100">1 集 (最安全防封)</option>
+            <option :value="2" class="bg-slate-900 text-slate-100">2 集 (推薦平衡)</option>
+            <option :value="3" class="bg-slate-900 text-slate-100">3 集 (高速下載)</option>
           </select>
         </div>
       </div>
