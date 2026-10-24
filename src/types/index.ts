@@ -1,20 +1,15 @@
-export interface EpisodeInfo {
-  ep_number: number;
-  ep_id: string;
-  available_channels?: string[];
-}
+// Re-export generated schemas from Rust single source of truth
+export type { EpisodeInfo } from './generated/EpisodeInfo';
+export type { ChannelOption } from './generated/ChannelOption';
+export type { SeriesMetadata } from './generated/SeriesMetadata';
+export type { SystemEnvironment } from './generated/SystemEnvironment';
+export type { DownloadQueuePayload } from './generated/DownloadQueuePayload';
+export type { ProgressPayload } from './generated/ProgressPayload';
+export type { EpisodeStatusPayload } from './generated/EpisodeStatusPayload';
+export type { DownloadTaskSpec } from './generated/DownloadTaskSpec';
+export type { DownloadProgress } from './generated/DownloadProgress';
 
-export interface ChannelOption {
-  id: string;
-  name: string;
-}
-
-export interface SeriesMetadata {
-  drama_id: string;
-  episodes: EpisodeInfo[];
-  channels: ChannelOption[];
-}
-
+// UI Specific state models
 export interface SeriesConfigModel {
   customTitle: string;
   season: number;
@@ -24,25 +19,10 @@ export interface SeriesConfigModel {
   binaryPath?: string;
 }
 
-export interface DownloadTaskSpec {
-  m3u8_url: string;
-  custom_title: string;
-  season: number;
-  episode: number;
-  save_dir: string;
-  referer: string;
-}
-
-export interface DownloadProgress {
-  percent: number;
-  speed: string;
-  eta: string;
-}
-
 export type QueueTaskStatus = 
   | { type: 'Queued' }
   | { type: 'Downloading' }
-  | { type: 'Progress'; data: DownloadProgress }
+  | { type: 'Progress'; data: import('./generated/DownloadProgress').DownloadProgress }
   | { type: 'Muxing' }
   | { type: 'Completed' }
   | { type: 'Failed'; error: string }
@@ -50,12 +30,6 @@ export type QueueTaskStatus =
 
 export interface QueueItem {
   id: number;
-  spec: DownloadTaskSpec;
+  spec: import('./generated/DownloadTaskSpec').DownloadTaskSpec;
   state: QueueTaskStatus;
-}
-
-export interface SystemEnvironment {
-  nm3u8dl_path: string | null;
-  ffmpeg_path: string | null;
-  is_ready: boolean;
 }

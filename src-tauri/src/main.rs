@@ -6,40 +6,13 @@ use bingeget::commands::{
     detect_system_environment_core, fetch_episode_m3u8_core, parse_series_metadata_core,
 };
 use bingeget::engine::downloader::{build_download_args, parse_progress_line, DownloadConfig, DownloadTaskSpec};
-use bingeget::models::{SeriesMetadata, SystemEnvironment};
-use serde::{Deserialize, Serialize};
+use bingeget::models::{
+    DownloadQueuePayload, EpisodeStatusPayload, ProgressPayload, SeriesMetadata, SystemEnvironment,
+};
 use tauri::{Emitter, State};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Semaphore;
-
-#[derive(Clone, Serialize)]
-struct ProgressPayload {
-    episode: u32,
-    percent: f32,
-    speed: String,
-    eta: String,
-}
-
-#[derive(Clone, Serialize)]
-struct EpisodeStatusPayload {
-    episode: u32,
-    status: String,
-    error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DownloadQueuePayload {
-    pub drama_id: String,
-    pub channel_id: String,
-    pub episodes: Vec<u32>,
-    pub custom_title: String,
-    pub season: u32,
-    pub save_dir: String,
-    pub threads: u32,
-    pub max_concurrent: usize,
-    pub binary_path: Option<String>,
-}
 
 #[tauri::command]
 fn get_system_environment() -> SystemEnvironment {

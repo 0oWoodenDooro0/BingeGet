@@ -2,21 +2,13 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+pub use crate::models::{DownloadProgress, DownloadTaskSpec};
+
 static PROGRESS_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?:Progress:\s*)?(\d+(?:\.\d+)?)%\s*(?:Speed:\s*)?([0-9.]+\s*[kKmMgG]?[bB]/s)\s*(?:ETA:\s*)?(\d{2}:\d{2}:\d{2})"#
     ).expect("Invalid progress regex")
 });
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DownloadTaskSpec {
-    pub m3u8_url: String,
-    pub custom_title: String,
-    pub season: u32,
-    pub episode: u32,
-    pub save_dir: String,
-    pub referer: String,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadConfig {
@@ -35,13 +27,6 @@ impl Default for DownloadConfig {
             binary_path: None,
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DownloadProgress {
-    pub percent: f32,
-    pub speed: String,
-    pub eta: String,
 }
 
 pub fn build_download_args(spec: &DownloadTaskSpec, config: &DownloadConfig) -> Vec<String> {

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typegen": "cargo test --manifest-path src-tauri/Cargo.toml --test export_schema_test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

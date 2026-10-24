@@ -122,6 +122,7 @@ const handleParse = async (url: string) => {
         episodes: Array.from({ length: 36 }, (_, i) => ({
           ep_number: i + 1,
           ep_id: `ep${i + 1}`,
+          available_channels: ['ikzy', 'hnzy', 'jszy'],
         })),
         channels: [
           { id: 'ikzy', name: 'iKun 資源 (ikzy) - 推薦' },
