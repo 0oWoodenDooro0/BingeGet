@@ -28,7 +28,7 @@ const handleBrowseDir = async () => {
   try {
     const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
     // In web preview without Tauri internals, avoid calling native dialog
-    if (!isTauri && typeof process !== 'undefined' && process.env?.NODE_ENV !== 'test') {
+    if (!isTauri && import.meta.env.MODE !== 'test') {
       console.warn('Directory dialog is only available in desktop environment');
       return;
     }
