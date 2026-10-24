@@ -17,11 +17,12 @@
 ## 2. Quality & Validation Commands
 
 - **Setup & Hooks**: `npm run setup` (installs node modules and wires `.githooks`).
-- **Frontend checks**: `npm run test:fe` (runs theme guardrails check + `vue-tsc --noEmit` + `vitest run`).
+- **Frontend checks**: `npm run test:fe` (runs lockfile sync check + theme guardrails check + `vue-tsc --noEmit` + `vitest run`).
 - **Backend checks**: `npm run test:be` (`cargo test --manifest-path src-tauri/Cargo.toml`).
 - **Full test suite**: `npm test` or `npm run check`.
-- **Pre-commit**: Automatically validates theme guardrails, TypeScript types, and ts-rs schema generation (`export_schema_test`).
+- **Pre-commit**: Automatically validates lockfile synchronization, theme guardrails, TypeScript types, and ts-rs schema generation (`export_schema_test`).
 - **Theme Guardrails**: Native `<select>` and `<option>` elements in WebView require `color-scheme: dark` and explicit dark background classes (`bg-slate-900 text-slate-100`) to avoid white background artifacts.
+- **Lockfile Synchronization**: Always ensure `package-lock.json` is synchronized with `package.json` (`npm run check:lockfile`). Modifying `package.json` without updating the lockfile will fail pre-commit and CI.
 
 ## 3. Testing Principles
 
