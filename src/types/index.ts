@@ -1,6 +1,7 @@
 export interface EpisodeInfo {
   ep_number: number;
   ep_id: string;
+  available_channels?: string[];
 }
 
 export interface ChannelOption {
@@ -12,6 +13,15 @@ export interface SeriesMetadata {
   drama_id: string;
   episodes: EpisodeInfo[];
   channels: ChannelOption[];
+}
+
+export interface SeriesConfigModel {
+  customTitle: string;
+  season: number;
+  saveDir: string;
+  threads: number;
+  maxConcurrent: number;
+  binaryPath?: string;
 }
 
 export interface DownloadTaskSpec {
@@ -42,4 +52,10 @@ export interface QueueItem {
   id: number;
   spec: DownloadTaskSpec;
   state: QueueTaskStatus;
+}
+
+export interface SystemEnvironment {
+  nm3u8dl_path: string | null;
+  ffmpeg_path: string | null;
+  is_ready: boolean;
 }

@@ -1,5 +1,12 @@
+use std::sync::LazyLock;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+
+static PROGRESS_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?:Progress:\s*)?(\d+(?:\.\d+)?)%\s*(?:Speed:\s*)?([0-9.]+\s*[kKmMgG]?[bB]/s)\s*(?:ETA:\s*)?(\d{2}:\d{2}:\d{2})"#
+    ).expect("Invalid progress regex")
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadTaskSpec {
@@ -16,6 +23,7 @@ pub struct DownloadConfig {
     pub threads: u32,
     pub tmp_dir: String,
     pub retry_count: u32,
+    pub binary_path: Option<String>,
 }
 
 impl Default for DownloadConfig {
@@ -24,6 +32,7 @@ impl Default for DownloadConfig {
             threads: 16,
             tmp_dir: "/tmp/bingeget_chunks".to_string(),
             retry_count: 5,
+            binary_path: None,
         }
     }
 }
@@ -90,14 +99,7 @@ pub fn build_download_args(spec: &DownloadTaskSpec, config: &DownloadConfig) -> 
 }
 
 pub fn parse_progress_line(line: &str) -> Option<DownloadProgress> {
-    // Matches patterns like:
-    // Progress: 45.2%  Speed: 18.50MB/s  ETA: 00:00:32
-    // or [12:34:56] 80.5% 12.3MB/s 00:01:10
-    let re = Regex::new(
-        r#"(?:Progress:\s*)?(\d+(?:\.\d+)?)%\s*(?:Speed:\s*)?([0-9.]+\s*[kKmMgG]?[bB]/s)\s*(?:ETA:\s*)?(\d{2}:\d{2}:\d{2})"#
-    ).ok()?;
-
-    if let Some(caps) = re.captures(line) {
+    if let Some(caps) = PROGRESS_RE.captures(line) {
         let percent: f32 = caps.get(1)?.as_str().parse().ok()?;
         let speed = caps.get(2)?.as_str().to_string();
         let eta = caps.get(3)?.as_str().to_string();

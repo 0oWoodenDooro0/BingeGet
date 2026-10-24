@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { Folder, Sliders, Layers } from 'lucide-vue-next';
+import type { SeriesConfigModel } from '../types';
 
-defineProps<{
-  customTitle: string;
-  season: number;
-  saveDir: string;
-  threads: number;
-  maxConcurrent: number;
+const props = defineProps<{
+  config: SeriesConfigModel;
   totalEpisodes: number;
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:customTitle', val: string): void;
-  (e: 'update:season', val: number): void;
-  (e: 'update:saveDir', val: string): void;
-  (e: 'update:threads', val: number): void;
-  (e: 'update:maxConcurrent', val: number): void;
+  (e: 'update:config', val: SeriesConfigModel): void;
 }>();
+
+const updateField = <K extends keyof SeriesConfigModel>(field: K, value: SeriesConfigModel[K]) => {
+  emit('update:config', {
+    ...props.config,
+    [field]: value,
+  });
+};
 </script>
 
 <template>
@@ -35,12 +35,14 @@ const emit = defineEmits<{
 
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2">
-          <label class="block text-xs text-slate-400 mb-1">自訂劇名 (必填)</label>
+          <label class="block text-xs text-slate-400 mb-1">
+            自訂劇名 <span class="text-rose-400">* (手動輸入，避免爬蟲雜訊)</span>
+          </label>
           <input
-            :value="customTitle"
-            @input="emit('update:customTitle', ($event.target as HTMLInputElement).value)"
+            :value="config.customTitle"
+            @input="updateField('customTitle', ($event.target as HTMLInputElement).value)"
             type="text"
-            placeholder="例如：繁花"
+            placeholder="請輸入劇名，例如：繁花"
             class="w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
           />
         </div>
@@ -50,8 +52,8 @@ const emit = defineEmits<{
           <div class="relative">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-slate-400">S</span>
             <input
-              :value="season"
-              @input="emit('update:season', parseInt(($event.target as HTMLInputElement).value) || 1)"
+              :value="config.season"
+              @input="updateField('season', parseInt(($event.target as HTMLInputElement).value) || 1)"
               type="number"
               min="1"
               max="99"
@@ -62,7 +64,13 @@ const emit = defineEmits<{
       </div>
 
       <div class="text-[11px] text-slate-500 font-mono bg-slate-950/40 px-2.5 py-1.5 rounded border border-slate-800/50">
-        預計命名範例：<span class="text-indigo-400 font-medium">{{ customTitle || '劇名' }} - S{{ season < 10 ? '0' + season : season }}E01.mp4</span>
+        預計命名範例：
+        <span v-if="config.customTitle.trim()" class="text-indigo-400 font-medium">
+          {{ config.customTitle.trim() }} - S{{ config.season < 10 ? '0' + config.season : config.season }}E01.mp4
+        </span>
+        <span v-else class="text-amber-400/80 italic">
+          (請填寫劇名以產生檔案名稱)
+        </span>
       </div>
     </div>
 
@@ -80,10 +88,10 @@ const emit = defineEmits<{
         <div class="flex gap-2">
           <div class="relative flex-1">
             <input
-              :value="saveDir"
-              @input="emit('update:saveDir', ($event.target as HTMLInputElement).value)"
+              :value="config.saveDir"
+              @input="updateField('saveDir', ($event.target as HTMLInputElement).value)"
               type="text"
-              placeholder="/media/TV/ShowName"
+              placeholder="/home/user/Downloads"
               class="w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
             />
           </div>
@@ -101,11 +109,11 @@ const emit = defineEmits<{
         <div>
           <div class="flex justify-between text-xs text-slate-400 mb-1">
             <span>單集切片線程</span>
-            <span class="text-indigo-400 font-medium">{{ threads }}</span>
+            <span class="text-indigo-400 font-medium">{{ config.threads }}</span>
           </div>
           <input
-            :value="threads"
-            @input="emit('update:threads', parseInt(($event.target as HTMLInputElement).value))"
+            :value="config.threads"
+            @input="updateField('threads', parseInt(($event.target as HTMLInputElement).value))"
             type="range"
             min="4"
             max="32"
@@ -116,17 +124,17 @@ const emit = defineEmits<{
 
         <div>
           <div class="flex justify-between text-xs text-slate-400 mb-1">
-            <span>同時下載集數</span>
-            <span class="text-indigo-400 font-medium">{{ maxConcurrent }} 集並發</span>
+            <span>同時下載集數 (防封限制)</span>
+            <span class="text-indigo-400 font-medium">{{ config.maxConcurrent }} 集並發</span>
           </div>
           <select
-            :value="maxConcurrent"
-            @change="emit('update:maxConcurrent', parseInt(($event.target as HTMLSelectElement).value))"
+            :value="config.maxConcurrent"
+            @change="updateField('maxConcurrent', parseInt(($event.target as HTMLSelectElement).value))"
             class="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-200 focus:border-indigo-500 focus:outline-none"
           >
             <option :value="1">1 集 (最安全防封)</option>
             <option :value="2">2 集 (推薦平衡)</option>
-            <option :value="3">3 集 (極速下載)</option>
+            <option :value="3">3 集 (高速下載)</option>
           </select>
         </div>
       </div>

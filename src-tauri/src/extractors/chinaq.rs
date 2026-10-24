@@ -1,10 +1,20 @@
 use std::collections::HashSet;
+use std::sync::LazyLock;
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use regex::Regex;
 use serde::Deserialize;
 
 use crate::extractors::SiteExtractor;
 use crate::models::{ChannelOption, EpisodeInfo, SeriesMetadata};
+
+static DRAMA_ID_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"/tv-cn/([a-zA-Z0-9]+)(?:/.*)?"#).expect("Invalid drama ID regex")
+});
+
+static EPISODE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"/tv-cn/[^/]+/ep(\d+)\.html"#).expect("Invalid episode regex")
+});
 
 #[derive(Default, Clone)]
 pub struct ChinaQExtractor {}
@@ -15,8 +25,7 @@ impl ChinaQExtractor {
     }
 
     pub fn extract_drama_id(&self, url: &str) -> Result<String> {
-        let re = Regex::new(r#"/tv-cn/([a-zA-Z0-9]+)(?:/.*)?"#)?;
-        if let Some(cap) = re.captures(url) {
+        if let Some(cap) = DRAMA_ID_RE.captures(url) {
             if let Some(id) = cap.get(1) {
                 return Ok(id.as_str().to_string());
             }
@@ -25,11 +34,10 @@ impl ChinaQExtractor {
     }
 
     pub fn parse_episodes_from_html(&self, html: &str) -> Result<Vec<EpisodeInfo>> {
-        let re = Regex::new(r#"/tv-cn/[^/]+/ep(\d+)\.html"#)?;
         let mut seen = HashSet::new();
         let mut episodes = Vec::new();
 
-        for cap in re.captures_iter(html) {
+        for cap in EPISODE_RE.captures_iter(html) {
             if let Some(num_str) = cap.get(1) {
                 let num_str = num_str.as_str();
                 if let Ok(num) = num_str.parse::<u32>() {
@@ -37,6 +45,7 @@ impl ChinaQExtractor {
                         episodes.push(EpisodeInfo {
                             ep_number: num,
                             ep_id: format!("ep{}", num),
+                            available_channels: Vec::new(),
                         });
                     }
                 }
@@ -112,8 +121,23 @@ impl ChinaQExtractor {
             channel_id
         ))
     }
+}
 
-    pub async fn fetch_series_metadata(&self, client: &reqwest::Client, url: &str) -> Result<SeriesMetadata> {
+#[async_trait]
+impl SiteExtractor for ChinaQExtractor {
+    fn id(&self) -> &'static str {
+        "chinaq"
+    }
+
+    fn name(&self) -> &'static str {
+        "ChinaQ"
+    }
+
+    fn can_handle(&self, url: &str) -> bool {
+        url.contains("chinaq.fun")
+    }
+
+    async fn fetch_series_metadata(&self, client: &reqwest::Client, url: &str) -> Result<SeriesMetadata> {
         let drama_id = self.extract_drama_id(url)?;
         let drama_url = format!("https://chinaq.fun/tv-cn/{}/", drama_id);
 
@@ -151,7 +175,7 @@ impl ChinaQExtractor {
         })
     }
 
-    pub async fn fetch_m3u8_for_episode(
+    async fn fetch_m3u8_for_episode(
         &self,
         client: &reqwest::Client,
         drama_id: &str,
@@ -170,19 +194,5 @@ impl ChinaQExtractor {
             .await?;
 
         self.extract_m3u8_for_channel(&qplays_json, channel)
-    }
-}
-
-impl SiteExtractor for ChinaQExtractor {
-    fn id(&self) -> &'static str {
-        "chinaq"
-    }
-
-    fn name(&self) -> &'static str {
-        "ChinaQ"
-    }
-
-    fn can_handle(&self, url: &str) -> bool {
-        url.contains("chinaq.fun")
     }
 }

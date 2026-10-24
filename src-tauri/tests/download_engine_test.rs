@@ -15,6 +15,7 @@ fn test_build_download_args_with_jellyfin_naming() {
         threads: 16,
         tmp_dir: "/tmp/bingeget_chunks".to_string(),
         retry_count: 5,
+        binary_path: None,
     };
 
     let args = build_download_args(&spec, &config);
