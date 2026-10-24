@@ -2,6 +2,7 @@
 export type { EpisodeInfo } from './generated/EpisodeInfo';
 export type { ChannelOption } from './generated/ChannelOption';
 export type { SeriesMetadata } from './generated/SeriesMetadata';
+export type { SearchResult } from './generated/SearchResult';
 export type { SystemEnvironment } from './generated/SystemEnvironment';
 export type { DownloadQueuePayload } from './generated/DownloadQueuePayload';
 export type { ProgressPayload } from './generated/ProgressPayload';

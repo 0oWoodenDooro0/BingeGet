@@ -7,6 +7,7 @@ fn test_export_all_typescript_schemas() {
     EpisodeInfo::export(&cfg).expect("failed to export EpisodeInfo");
     ChannelOption::export(&cfg).expect("failed to export ChannelOption");
     SeriesMetadata::export(&cfg).expect("failed to export SeriesMetadata");
+    SearchResult::export(&cfg).expect("failed to export SearchResult");
     SystemEnvironment::export(&cfg).expect("failed to export SystemEnvironment");
     DownloadQueuePayload::export(&cfg).expect("failed to export DownloadQueuePayload");
     ProgressPayload::export(&cfg).expect("failed to export ProgressPayload");

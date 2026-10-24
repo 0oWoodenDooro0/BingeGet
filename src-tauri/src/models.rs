@@ -21,8 +21,21 @@ pub struct ChannelOption {
 #[ts(export, export_to = "../../src/types/generated/")]
 pub struct SeriesMetadata {
     pub drama_id: String,
+    #[serde(default)]
+    pub category_slug: Option<String>,
     pub episodes: Vec<EpisodeInfo>,
     pub channels: Vec<ChannelOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/types/generated/")]
+pub struct SearchResult {
+    pub title: String,
+    pub year: Option<String>,
+    pub category: Option<String>,
+    pub url: String,
+    pub source_id: String,
+    pub source_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -45,6 +58,8 @@ pub struct DownloadQueuePayload {
     pub threads: u32,
     pub max_concurrent: usize,
     pub binary_path: Option<String>,
+    #[serde(default)]
+    pub category_slug: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

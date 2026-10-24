@@ -5,8 +5,9 @@ use bingeget::extractors::SiteExtractor;
 fn test_chinaq_can_handle_urls() {
     let extractor = ChinaQExtractor::new();
     assert!(extractor.can_handle("https://chinaq.fun/tv-cn/202614235/"));
-    assert!(extractor.can_handle("https://chinaq.fun/tv-cn/202614235/ep1.html"));
-    assert!(extractor.can_handle("http://chinaq.fun/tv-cn/12345/"));
+    assert!(extractor.can_handle("https://chinaq.fun/tv-kr/202639642/"));
+    assert!(extractor.can_handle("https://chinaq.fun/tv-tw/12345/"));
+    assert!(extractor.can_handle("https://chinaq.fun/tv-jp/99999/ep1.html"));
     assert!(!extractor.can_handle("https://example.com/movie/123"));
 }
 
@@ -21,6 +22,18 @@ fn test_chinaq_extract_drama_id() {
         extractor.extract_drama_id("https://chinaq.fun/tv-cn/202614235/ep12.html").unwrap(),
         "202614235"
     );
+    assert_eq!(
+        extractor.extract_drama_id("https://chinaq.fun/tv-kr/202639642/").unwrap(),
+        "202639642"
+    );
+    assert_eq!(
+        extractor.extract_drama_id("https://chinaq.fun/tv-tw/12345/").unwrap(),
+        "12345"
+    );
+    assert_eq!(
+        extractor.extract_drama_id("https://chinaq.fun/tv-jp/99999/ep3.html").unwrap(),
+        "99999"
+    );
     assert!(extractor.extract_drama_id("https://chinaq.fun/invalid-url").is_err());
 }
 
@@ -29,9 +42,9 @@ fn test_chinaq_parse_episodes_from_html() {
     let extractor = ChinaQExtractor::new();
     let sample_html = r#"
         <div class="category clearfix">
-            <h2><a href="/tv-cn/202614235/ep3.html">花開錦繡 第3集</a></h2>
-            <h2><a href="/tv-cn/202614235/ep1.html">花開錦繡 第1集</a></h2>
-            <h2><a href="/tv-cn/202614235/ep2.html">花開錦繡 第2集</a></h2>
+            <h2><a href="/tv-kr/202639642/ep3.html">Doctor X 第3集</a></h2>
+            <h2><a href="/tv-kr/202639642/ep1.html">Doctor X 第1集</a></h2>
+            <h2><a href="/tv-kr/202639642/ep2.html">Doctor X 第2集</a></h2>
         </div>
     "#;
 
@@ -107,18 +120,62 @@ fn test_chinaq_extract_m3u8_with_channel_lock() {
     assert!(m3u8_missing.is_err());
 }
 
+#[test]
+fn test_chinaq_parse_search_results() {
+    let extractor = ChinaQExtractor::new();
+    let sample_all_html = r#"
+        <ul class="drama_list">
+            <li cat="cn">
+                <a href="/tv-cn/202312271/">
+                    繁花
+                    (2023)
+                </a>
+            </li>
+            <li cat="kr">
+                <a href="/tv-kr/202625953/">
+                    殭屍校園 第二季 지금 우리 학교는
+                    (2026)
+                </a>
+            </li>
+            <li cat="tw">
+                <a href="/tv-tw/202209121/">
+                    繁星點點
+                </a>
+            </li>
+        </ul>
+    "#;
+
+    // Test match keyword "繁花"
+    let results = extractor.parse_search_results(sample_all_html, "繁花").unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].title, "繁花");
+    assert_eq!(results[0].year.as_deref(), Some("2023"));
+    assert_eq!(results[0].category.as_deref(), Some("陸劇"));
+    assert_eq!(results[0].url, "https://chinaq.fun/tv-cn/202312271/");
+    assert_eq!(results[0].source_id, "chinaq");
+    assert_eq!(results[0].source_name, "ChinaQ");
+
+    // Test partial match "繁" matches both
+    let multi_results = extractor.parse_search_results(sample_all_html, "繁").unwrap();
+    assert_eq!(multi_results.len(), 2);
+
+    // Test no match
+    let empty_results = extractor.parse_search_results(sample_all_html, "不存在的劇名").unwrap();
+    assert!(empty_results.is_empty());
+}
+
 #[tokio::test]
 async fn test_chinaq_live_metadata_and_m3u8_fetch() {
     let extractor = ChinaQExtractor::new();
     let client = reqwest::Client::new();
-    let url = "https://chinaq.fun/tv-cn/202614235/";
+    let url = "https://chinaq.fun/tv-kr/202639642/";
 
     let metadata = extractor
         .fetch_series_metadata(&client, url)
         .await
-        .expect("Live series metadata should succeed");
+        .expect("Live series metadata should succeed for tv-kr");
 
-    assert_eq!(metadata.drama_id, "202614235");
+    assert_eq!(metadata.drama_id, "202639642");
     assert!(!metadata.episodes.is_empty(), "Should parse episodes");
     assert!(!metadata.channels.is_empty(), "Should parse available channels");
 

@@ -7,7 +7,7 @@ import SeriesConfig from './components/SeriesConfig.vue';
 import ChannelSelector from './components/ChannelSelector.vue';
 import EpisodePicker from './components/EpisodePicker.vue';
 import DownloadQueue from './components/DownloadQueue.vue';
-import type { SeriesMetadata, QueueItem, SeriesConfigModel, SystemEnvironment } from './types';
+import type { SeriesMetadata, QueueItem, SeriesConfigModel, SystemEnvironment, SearchResult } from './types';
 
 const loading = ref(false);
 const errorMsg = ref('');
@@ -114,11 +114,12 @@ const handleParse = async (url: string) => {
       metadata.value = data;
     } else {
       // Direct parse for preview
-      const dramaIdMatch = url.match(/\/tv-cn\/([a-zA-Z0-9]+)/);
+      const dramaIdMatch = url.match(/\/(?:tv-[a-zA-Z0-9]+|[a-zA-Z0-9_-]+)\/([a-zA-Z0-9]+)/);
       const dramaId = dramaIdMatch ? dramaIdMatch[1] : '202614235';
       
       metadata.value = {
         drama_id: dramaId,
+        category_slug: 'tv-cn',
         episodes: Array.from({ length: 36 }, (_, i) => ({
           ep_number: i + 1,
           ep_id: `ep${i + 1}`,
@@ -149,6 +150,14 @@ const handleParse = async (url: string) => {
   }
 };
 
+// Handle series search result selection
+const handleSelectResult = async (result: SearchResult) => {
+  if (result.title) {
+    config.value.customTitle = result.title;
+  }
+  await handleParse(result.url);
+};
+
 // Start download
 const startDownload = async () => {
   if (!config.value.customTitle.trim()) {
@@ -163,6 +172,7 @@ const startDownload = async () => {
 
   errorMsg.value = '';
 
+  const categorySlug = metadata.value?.category_slug || 'tv-cn';
   const newItems: QueueItem[] = selectedEpisodes.value.map((ep, idx) => ({
     id: idx + 1,
     spec: {
@@ -171,7 +181,7 @@ const startDownload = async () => {
       season: config.value.season,
       episode: ep,
       save_dir: config.value.saveDir,
-      referer: `https://chinaq.fun/tv-cn/${metadata.value?.drama_id}/ep${ep}.html`,
+      referer: `https://chinaq.fun/${categorySlug}/${metadata.value?.drama_id}/ep${ep}.html`,
     },
     state: { type: 'Queued' },
   }));
@@ -184,6 +194,7 @@ const startDownload = async () => {
       await invoke('start_download_queue', {
         req: {
           drama_id: metadata.value?.drama_id,
+          category_slug: categorySlug,
           channel_id: selectedChannel.value,
           episodes: selectedEpisodes.value,
           custom_title: config.value.customTitle.trim(),
@@ -287,8 +298,12 @@ const handleCancel = (ep: number) => {
         <span>{{ successMsg }}</span>
       </div>
 
-      <!-- URL Input Bar -->
-      <UrlBar :loading="loading" @parse="handleParse" />
+      <!-- URL & Search Input Bar -->
+      <UrlBar
+        :loading="loading"
+        @parse="handleParse"
+        @select-result="handleSelectResult"
+      />
 
       <!-- Metadata & Configuration Section -->
       <template v-if="metadata">

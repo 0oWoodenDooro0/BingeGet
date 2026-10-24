@@ -2,4 +2,4 @@
 import type { ChannelOption } from "./ChannelOption";
 import type { EpisodeInfo } from "./EpisodeInfo";
 
-export type SeriesMetadata = { drama_id: string, episodes: Array<EpisodeInfo>, channels: Array<ChannelOption>, };
+export type SeriesMetadata = { drama_id: string, category_slug: string | null, episodes: Array<EpisodeInfo>, channels: Array<ChannelOption>, };

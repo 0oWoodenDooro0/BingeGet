@@ -4,10 +4,12 @@
 use std::sync::Arc;
 use bingeget::commands::{
     detect_system_environment_core, fetch_episode_m3u8_core, parse_series_metadata_core,
+    search_series_core,
 };
 use bingeget::engine::downloader::{build_download_args, parse_progress_line, DownloadConfig, DownloadTaskSpec};
 use bingeget::models::{
-    DownloadQueuePayload, EpisodeStatusPayload, ProgressPayload, SeriesMetadata, SystemEnvironment,
+    DownloadQueuePayload, EpisodeStatusPayload, ProgressPayload, SearchResult, SeriesMetadata,
+    SystemEnvironment,
 };
 use tauri::{Emitter, State};
 use tokio::io::{AsyncReadExt, BufReader};
@@ -25,6 +27,14 @@ async fn parse_series_metadata(
     url: String,
 ) -> Result<SeriesMetadata, String> {
     parse_series_metadata_core(&client, &url).await
+}
+
+#[tauri::command]
+async fn search_series(
+    client: State<'_, reqwest::Client>,
+    keyword: String,
+) -> Result<Vec<SearchResult>, String> {
+    search_series_core(&client, &keyword).await
 }
 
 #[tauri::command]
@@ -54,6 +64,7 @@ async fn start_download_queue(
     let save_dir = req.save_dir;
     let threads = req.threads;
     let binary_path = req.binary_path;
+    let category_slug = req.category_slug.unwrap_or_else(|| "tv-cn".to_string());
 
     for ep in req.episodes {
         let app = app.clone();
@@ -65,6 +76,7 @@ async fn start_download_queue(
         let custom_title = custom_title.clone();
         let save_dir = save_dir.clone();
         let binary_path = binary_path.clone();
+        let category_slug = category_slug.clone();
 
         tokio::spawn(async move {
             let _permit = match sem.acquire().await {
@@ -98,7 +110,7 @@ async fn start_download_queue(
                 season,
                 episode: ep,
                 save_dir,
-                referer: format!("https://chinaq.fun/tv-cn/{}/{}.html", drama_id, ep_id),
+                referer: format!("https://chinaq.fun/{}/{}/{}.html", category_slug, drama_id, ep_id),
             };
 
             let config = DownloadConfig {
@@ -223,6 +235,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_system_environment,
             parse_series_metadata,
+            search_series,
             fetch_episode_m3u8,
             start_download_queue,
         ])

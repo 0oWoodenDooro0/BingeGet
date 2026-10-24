@@ -1,4 +1,7 @@
-use bingeget::commands::{detect_system_environment_core, fetch_episode_m3u8_core, parse_series_metadata_core};
+use bingeget::commands::{
+    detect_system_environment_core, fetch_episode_m3u8_core, parse_series_metadata_core,
+    search_series_core,
+};
 
 #[tokio::test]
 async fn test_parse_series_metadata_empty_or_invalid_url() {
@@ -21,6 +24,16 @@ async fn test_fetch_episode_m3u8_validation() {
 
     let err3 = fetch_episode_m3u8_core(&client, "202614235", "ep1", "").await.unwrap_err();
     assert!(err3.contains("Channel ID cannot be empty"));
+}
+
+#[tokio::test]
+async fn test_search_series_validation() {
+    let client = reqwest::Client::new();
+    let err = search_series_core(&client, "").await.unwrap_err();
+    assert!(err.contains("Keyword cannot be empty"));
+
+    let err2 = search_series_core(&client, "   ").await.unwrap_err();
+    assert!(err2.contains("Keyword cannot be empty"));
 }
 
 #[test]

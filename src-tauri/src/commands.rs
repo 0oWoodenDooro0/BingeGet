@@ -1,7 +1,7 @@
 use std::path::Path;
 use crate::extractors::chinaq::ChinaQExtractor;
 use crate::extractors::SiteExtractor;
-use crate::models::{SeriesMetadata, SystemEnvironment};
+use crate::models::{SearchResult, SeriesMetadata, SystemEnvironment};
 
 pub fn detect_system_environment_core() -> SystemEnvironment {
     let check_path = |name: &str, preferred: &str| -> Option<String> {
@@ -71,4 +71,30 @@ pub async fn fetch_episode_m3u8_core(
         .fetch_m3u8_for_episode(client, drama_id, ep_id, channel)
         .await
         .map_err(|e| e.to_string())
+}
+
+pub async fn search_series_core(
+    client: &reqwest::Client,
+    keyword: &str,
+) -> Result<Vec<SearchResult>, String> {
+    let kw = keyword.trim();
+    if kw.is_empty() {
+        return Err("Keyword cannot be empty".to_string());
+    }
+
+    let mut all_results = Vec::new();
+    let extractors: Vec<Box<dyn SiteExtractor>> = vec![
+        Box::new(ChinaQExtractor::new()),
+    ];
+
+    for extractor in extractors {
+        match extractor.search(client, kw).await {
+            Ok(results) => all_results.extend(results),
+            Err(e) => {
+                eprintln!("Search error on {}: {}", extractor.name(), e);
+            }
+        }
+    }
+
+    Ok(all_results)
 }
