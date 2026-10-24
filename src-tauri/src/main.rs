@@ -218,6 +218,7 @@ fn main() {
         .expect("Failed to build HTTP client");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(client)
         .invoke_handler(tauri::generate_handler![
             get_system_environment,

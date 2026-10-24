@@ -17,8 +17,16 @@
 ## 2. Quality & Validation Commands
 
 - **Setup & Hooks**: `npm run setup` (installs node modules and wires `.githooks`).
-- **Frontend checks**: `npm run test:fe` (runs theme guardrails check + `vue-tsc --noEmit`).
+- **Frontend checks**: `npm run test:fe` (runs theme guardrails check + `vue-tsc --noEmit` + `vitest run`).
 - **Backend checks**: `npm run test:be` (`cargo test --manifest-path src-tauri/Cargo.toml`).
 - **Full test suite**: `npm test` or `npm run check`.
 - **Pre-commit**: Automatically validates theme guardrails, TypeScript types, and ts-rs schema generation (`export_schema_test`).
 - **Theme Guardrails**: Native `<select>` and `<option>` elements in WebView require `color-scheme: dark` and explicit dark background classes (`bg-slate-900 text-slate-100`) to avoid white background artifacts.
+
+## 3. Testing Principles
+
+- **Focus on Behavioral Logic and State Transitions**: Tests must verify public interfaces and critical behaviors (such as event emission and payloads, state transitions, conditional button disabling/enabling, external API / Plugin calls, and cancellation/error handling) rather than static DOM content or hardcoded copy.
+- **Strictly Prohibit Non-Logical Text Assertions**:
+  - Do not write non-logical tests asserting static text, placeholders, or template labels.
+  - Assertions on static copy contain no business logic and are fragile to minor copy tweaks.
+  - Test value lies in verifying functional correctness and boundary conditions, not literal copy.
