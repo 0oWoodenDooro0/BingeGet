@@ -33,4 +33,5 @@ export interface QueueItem {
   id: number;
   spec: import('./generated/DownloadTaskSpec').DownloadTaskSpec;
   state: QueueTaskStatus;
+  progress?: import('./generated/DownloadProgress').DownloadProgress;
 }

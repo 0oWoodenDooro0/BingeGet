@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 import { Download, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-vue-next';
 import HeaderBar from './components/HeaderBar.vue';
 import UrlBar from './components/UrlBar.vue';
@@ -7,8 +7,13 @@ import SeriesConfig from './components/SeriesConfig.vue';
 import ChannelSelector from './components/ChannelSelector.vue';
 import EpisodePicker from './components/EpisodePicker.vue';
 import DownloadQueue from './components/DownloadQueue.vue';
-import { useSystemEnvironment, useSeriesMetadata, isTauri, getErrorMessage } from './composables';
-import type { QueueItem, SeriesConfigModel, SearchResult } from './types';
+import {
+  useSystemEnvironment,
+  useSeriesMetadata,
+  useDownloadQueue,
+  getErrorMessage,
+} from './composables';
+import type { SeriesConfigModel, SearchResult } from './types';
 
 const loading = ref(false);
 const errorMsg = ref('');
@@ -35,54 +40,13 @@ const config = ref<SeriesConfigModel>({
   maxConcurrent: 2,
 });
 
-// Queue state
-const queue = ref<QueueItem[]>([]);
-
-// Setup download event listeners on mount
-onMounted(async () => {
-  if (isTauri()) {
-    try {
-      const { listen } = await import('@tauri-apps/api/event');
-
-      // Listen for download progress updates from Rust backend
-      await listen<{ episode: number; percent: number; speed: string; eta: string }>(
-        'download-progress',
-        (event) => {
-          const item = queue.value.find(q => q.spec.episode === event.payload.episode);
-          if (item) {
-            item.state = {
-              type: 'Progress',
-              data: {
-                percent: event.payload.percent,
-                speed: event.payload.speed,
-                eta: event.payload.eta,
-              },
-            };
-          }
-        }
-      );
-
-      // Listen for download status updates from Rust backend
-      await listen<{ episode: number; status: string; error?: string }>(
-        'download-status',
-        (event) => {
-          const item = queue.value.find(q => q.spec.episode === event.payload.episode);
-          if (item) {
-            if (event.payload.status === 'Completed') {
-              item.state = { type: 'Completed' };
-            } else if (event.payload.status === 'Downloading') {
-              item.state = { type: 'Downloading' };
-            } else if (event.payload.status === 'Failed') {
-              item.state = { type: 'Failed', error: event.payload.error || '下載失敗' };
-            }
-          }
-        }
-      );
-    } catch (err: unknown) {
-      console.warn('Tauri initialization note:', getErrorMessage(err));
-    }
-  }
-});
+// Download queue state and event coordination composable
+const {
+  queue,
+  startDownload: triggerStartDownload,
+  retryDownload,
+  cancelDownload,
+} = useDownloadQueue();
 
 // Handle URL parse
 const handleParse = async (url: string) => {
@@ -122,89 +86,25 @@ const startDownload = async () => {
 
   errorMsg.value = '';
 
-  const categorySlug = metadata.value?.category_slug || 'tv-cn';
-  const newItems: QueueItem[] = selectedEpisodes.value.map((ep, idx) => ({
-    id: idx + 1,
-    spec: {
-      m3u8_url: '',
-      custom_title: config.value.customTitle.trim(),
-      season: config.value.season,
-      episode: ep,
-      save_dir: config.value.saveDir,
-      referer: `https://chinaq.fun/${categorySlug}/${metadata.value?.drama_id}/ep${ep}.html`,
-    },
-    state: { type: 'Queued' },
-  }));
-
-  queue.value = newItems;
-
-  if (isTauri()) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('start_download_queue', {
-        req: {
-          drama_id: metadata.value?.drama_id,
-          category_slug: categorySlug,
-          channel_id: selectedChannel.value,
-          episodes: selectedEpisodes.value,
-          custom_title: config.value.customTitle.trim(),
-          season: config.value.season,
-          save_dir: config.value.saveDir,
-          threads: config.value.threads,
-          max_concurrent: config.value.maxConcurrent,
-          binary_path: config.value.binaryPath || null,
-        }
-      });
-    } catch (err: unknown) {
-      errorMsg.value = `下載啟動失敗: ${getErrorMessage(err)}`;
-    }
-  } else {
-    // Simulated queue progress for web preview
-    simulateQueueProgress();
+  try {
+    if (!metadata.value) return;
+    await triggerStartDownload({
+      metadata: metadata.value,
+      selectedEpisodes: selectedEpisodes.value,
+      selectedChannel: selectedChannel.value,
+      config: config.value,
+    });
+  } catch (err: unknown) {
+    errorMsg.value = getErrorMessage(err);
   }
-};
-
-const simulateQueueProgress = () => {
-  let activeIndex = 0;
-  const interval = setInterval(() => {
-    if (activeIndex >= queue.value.length) {
-      clearInterval(interval);
-      return;
-    }
-
-    const current = queue.value[activeIndex];
-    if (current.state.type === 'Queued') {
-      current.state = {
-        type: 'Progress',
-        data: { percent: 20, speed: '18.4 MB/s', eta: '00:01:05' }
-      };
-    } else if (current.state.type === 'Progress') {
-      const nextPct = current.state.data.percent + 40;
-      if (nextPct >= 100) {
-        current.state = { type: 'Muxing' };
-        setTimeout(() => {
-          current.state = { type: 'Completed' };
-          activeIndex++;
-        }, 800);
-      } else {
-        current.state.data.percent = nextPct;
-      }
-    }
-  }, 1000);
 };
 
 const handleRetry = (ep: number) => {
-  const item = queue.value.find(q => q.spec.episode === ep);
-  if (item) {
-    item.state = { type: 'Queued' };
-  }
+  retryDownload(ep);
 };
 
 const handleCancel = (ep: number) => {
-  const item = queue.value.find(q => q.spec.episode === ep);
-  if (item) {
-    item.state = { type: 'Cancelled' };
-  }
+  cancelDownload(ep);
 };
 </script>
 
