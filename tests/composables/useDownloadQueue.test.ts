@@ -71,8 +71,8 @@ describe('useDownloadQueue composable', () => {
         selectedChannel: '',
         config: dummyConfig,
       })
-    ).rejects.toThrow('請選擇來源線路！');
-    expect(error.value).toBe('請選擇來源線路！');
+    ).rejects.toThrow('請選擇來源頻道！');
+    expect(error.value).toBe('請選擇來源頻道！');
   });
 
   it('builds initial queue items correctly with proper spec and Queued state', async () => {
@@ -94,7 +94,7 @@ describe('useDownloadQueue composable', () => {
         season: 1,
         episode: 1,
         save_dir: '/downloads',
-        referer: 'https://chinaq.fun/tv-tw/drama-123/ep1.html',
+        referer: undefined,
       },
       state: { type: 'Queued' },
     });
@@ -103,6 +103,14 @@ describe('useDownloadQueue composable', () => {
   });
 
   it('uses fallback category_slug when metadata category_slug is missing', async () => {
+    const mockInvoke = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@tauri-apps/api/core', () => ({
+      invoke: mockInvoke,
+    }));
+
+    // @ts-expect-error Mock Tauri
+    window.__TAURI_INTERNALS__ = {};
+
     const { queue, startDownload } = useDownloadQueue({ autoListen: false });
 
     const metadataWithoutSlug: SeriesMetadata = {
@@ -117,7 +125,12 @@ describe('useDownloadQueue composable', () => {
       config: dummyConfig,
     });
 
-    expect(queue.value[0].spec.referer).toBe('https://chinaq.fun/tv-cn/drama-123/ep3.html');
+    expect(mockInvoke).toHaveBeenCalledWith('start_download_queue', {
+      req: expect.objectContaining({
+        category_slug: 'tv-cn',
+      }),
+    });
+    expect(queue.value[0].spec.referer).toBeUndefined();
   });
 
   it('simulates queue progress in non-tauri environment', async () => {
@@ -245,7 +258,7 @@ describe('useDownloadQueue composable', () => {
           season: 1,
           episode: 1,
           save_dir: '/downloads',
-          referer: 'https://chinaq.fun/tv-tw/drama-123/ep1.html',
+          referer: undefined,
         },
         state: { type: 'Queued' },
       },
@@ -336,7 +349,7 @@ describe('useDownloadQueue composable', () => {
           season: 1,
           episode: 1,
           save_dir: '/downloads',
-          referer: 'https://chinaq.fun/tv-tw/drama-123/ep1.html',
+          referer: undefined,
         },
         state: { type: 'Failed', error: 'Some error' },
       },
@@ -348,18 +361,20 @@ describe('useDownloadQueue composable', () => {
           season: 1,
           episode: 2,
           save_dir: '/downloads',
-          referer: 'https://chinaq.fun/tv-tw/drama-123/ep2.html',
+          referer: undefined,
         },
         state: { type: 'Downloading' },
       },
     ];
 
     // Retry episode 1
-    retryDownload(1);
+    const episodeNumber = 1;
+    retryDownload(episodeNumber);
     expect(queue.value[0].state).toEqual({ type: 'Queued' });
 
     // Cancel episode 2
-    cancelDownload(2);
+    const cancelEpisodeNumber = 2;
+    cancelDownload(cancelEpisodeNumber);
     expect(queue.value[1].state).toEqual({ type: 'Cancelled' });
 
     // Clear queue

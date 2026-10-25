@@ -118,6 +118,20 @@ impl TaskQueue {
     }
 }
 
+fn emit_progress_if_matched(app: &tauri::AppHandle, line: &str, ep: u32) {
+    if let Some(prog) = parse_progress_line(line) {
+        let _ = app.emit(
+            "download-progress",
+            ProgressPayload {
+                episode: ep,
+                percent: prog.percent,
+                speed: prog.speed,
+                eta: prog.eta,
+            },
+        );
+    }
+}
+
 pub async fn run_download_queue(
     app: tauri::AppHandle,
     client: reqwest::Client,
@@ -238,14 +252,7 @@ pub async fn run_download_queue(
                         if b == b'\r' || b == b'\n' {
                             if !line_buf.is_empty() {
                                 let line_str = String::from_utf8_lossy(&line_buf);
-                                if let Some(prog) = parse_progress_line(&line_str) {
-                                    let _ = app.emit("download-progress", ProgressPayload {
-                                        episode: ep,
-                                        percent: prog.percent,
-                                        speed: prog.speed,
-                                        eta: prog.eta,
-                                    });
-                                }
+                                emit_progress_if_matched(&app, &line_str, ep);
                                 line_buf.clear();
                             }
                         } else {
@@ -255,14 +262,7 @@ pub async fn run_download_queue(
                 }
                 if !line_buf.is_empty() {
                     let line_str = String::from_utf8_lossy(&line_buf);
-                    if let Some(prog) = parse_progress_line(&line_str) {
-                        let _ = app.emit("download-progress", ProgressPayload {
-                            episode: ep,
-                            percent: prog.percent,
-                            speed: prog.speed,
-                            eta: prog.eta,
-                        });
-                    }
+                    emit_progress_if_matched(&app, &line_str, ep);
                 }
             }
 

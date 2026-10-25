@@ -172,7 +172,7 @@ export function useDownloadQueue(options: UseDownloadQueueOptions = {}) {
     }
 
     if (!selectedChannel || !selectedChannel.trim()) {
-      const msg = '請選擇來源線路！';
+      const msg = '請選擇來源頻道！';
       error.value = msg;
       throw new Error(msg);
     }
@@ -188,7 +188,7 @@ export function useDownloadQueue(options: UseDownloadQueueOptions = {}) {
         season: config.season,
         episode: ep,
         save_dir: config.saveDir,
-        referer: `https://chinaq.fun/${categorySlug}/${metadata?.drama_id}/ep${ep}.html`,
+        referer: undefined,
       },
       state: { type: 'Queued' },
     }));
@@ -221,8 +221,8 @@ export function useDownloadQueue(options: UseDownloadQueueOptions = {}) {
     }
   };
 
-  const retryDownload = (ep: number) => {
-    const item = queue.value.find(q => q.spec.episode === ep);
+  const retryDownload = (episodeNumber: number) => {
+    const item = queue.value.find(q => q.spec.episode === episodeNumber);
     if (item) {
       item.state = { type: 'Queued' };
       if (item.progress) {
@@ -231,8 +231,8 @@ export function useDownloadQueue(options: UseDownloadQueueOptions = {}) {
     }
   };
 
-  const cancelDownload = (ep: number) => {
-    const item = queue.value.find(q => q.spec.episode === ep);
+  const cancelDownload = (episodeNumber: number) => {
+    const item = queue.value.find(q => q.spec.episode === episodeNumber);
     if (item) {
       item.state = { type: 'Cancelled' };
     }
