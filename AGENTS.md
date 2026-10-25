@@ -22,6 +22,12 @@
 - **Extractor Matrix**: Verify all supported regional slugs (`tv-cn`, `tv-kr`, `tv-tw`, `tv-jp`, `tv-hk`) when testing extractors.
 - **Architecture Boundaries**: Decouple state presentation (e.g. search results) from input controls (e.g. URL bar); route referer and header logic through `SiteExtractor` methods rather than hardcoding.
 
+## Orchestration & Delegation
+
+- **Coordinator Discipline**: When executing workflow skills (`implement-spec`, `implement`), the coordinator agent manages the task graph, monitors subagent status, and merges integration branches. It must NOT modify code or tests directly in the coordinator workspace.
+- **Worktree Isolation**: All implementation tasks must be delegated via `delegate_task` with `isolation: "worktree"` to protect the primary checkout and sandbox code changes.
+- **Mandatory Review Gate**: An integration branch or PR cannot be marked ready until two-axis code review (Standards & Spec) completes via `delegate_task` and all hard findings are resolved.
+
 ## Agent skills
 
 ### Issue tracker
