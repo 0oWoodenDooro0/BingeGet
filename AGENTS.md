@@ -14,7 +14,6 @@
 
 - **Dependencies**: If `node_modules` or CLI tools (`vue-tsc`) are missing, run `npm run setup` first.
 - **Lockfile Sync**: Always keep `package-lock.json` in sync with `package.json` (`npm run check:lockfile`). Modifying `package.json` without updating the lockfile fails pre-commit and CI.
-- **Theme & UI Guardrails**: Native `<select>` and `<option>` elements require `color-scheme: dark` and dark background classes (`bg-slate-900 text-slate-100`). Avoid verbose `例如：` prefixes in input placeholders (`npm run check:theme`).
 - **Branch Lock**: If git checkout fails due to a stale worktree lock, run `npm run worktree:prune` or `git worktree remove --force <path>`.
 
 ## Development & Testing Rules
