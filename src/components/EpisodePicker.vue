@@ -40,6 +40,7 @@ const emit = defineEmits<{
 const videoRef = ref<HTMLVideoElement | null>(null);
 const rangeStart = ref(1);
 const rangeEnd = ref(10);
+const copiedStreamUrl = ref(false);
 
 const currentDramaId = computed(() => {
   return props.dramaId || props.metadata?.drama_id || '';
@@ -54,6 +55,7 @@ const currentChannelName = computed(() => {
 const {
   activePreviewEp,
   streamDetails,
+  currentStreamSource,
   loading: loadingStream,
   error: streamError,
   isPlaying,
@@ -77,6 +79,21 @@ const formatTime = (secs: number) => {
   const mm = m < 10 ? '0' + m : m;
   const ss = s < 10 ? '0' + s : s;
   return `${mm}:${ss}`;
+};
+
+const copyStreamUrl = async () => {
+  if (!currentStreamSource.value) return;
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(currentStreamSource.value);
+      copiedStreamUrl.value = true;
+      setTimeout(() => {
+        copiedStreamUrl.value = false;
+      }, 2000);
+    }
+  } catch {
+    // Ignore clipboard errors
+  }
 };
 
 // Bind video ref
@@ -323,6 +340,7 @@ const applyRange = () => {
             ref="videoRef"
             data-testid="preview-video"
             class="h-full w-full object-contain"
+            :poster="metadata?.cover_url ?? undefined"
             playsinline
             muted
           ></video>
@@ -344,15 +362,42 @@ const applyRange = () => {
             class="absolute inset-0 flex flex-col items-center justify-center bg-black/85 p-4 text-center text-xs text-rose-300 gap-2 z-10"
           >
             <AlertCircle class="h-6 w-6 text-rose-400" />
-            <span>{{ streamError }}</span>
-            <button
-              type="button"
-              data-testid="btn-retry-preview"
-              @click="switchPreview(activePreviewEp)"
-              class="mt-1 rounded bg-rose-950/50 border border-rose-800 px-2.5 py-1 text-[11px] text-rose-200 hover:bg-rose-900/50"
-            >
-              重新重試
-            </button>
+            <span class="max-w-[90%]">{{ streamError }}</span>
+            <span class="text-[11px] text-slate-400 max-w-[90%]">
+              提示：若系統缺少解碼器，請檢查本機 GStreamer 套件或複製串流網址使用外部播放器 (如 VLC / mpv) 播放。
+            </span>
+            <div class="flex items-center gap-2 mt-1">
+              <button
+                type="button"
+                data-testid="btn-retry-preview"
+                @click="switchPreview(activePreviewEp)"
+                class="rounded bg-rose-950/50 border border-rose-800 px-2.5 py-1 text-[11px] text-rose-200 hover:bg-rose-900/50 transition-colors"
+              >
+                重新重試
+              </button>
+              <button
+                v-if="currentStreamSource"
+                type="button"
+                data-testid="btn-copy-stream-url"
+                @click="copyStreamUrl"
+                class="rounded bg-slate-800 border border-slate-700 px-2.5 py-1 text-[11px] text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                {{ copiedStreamUrl ? '已複製網址' : '複製串流網址' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Standby Play Overlay / Placeholder -->
+          <div
+            v-else-if="!isPlaying"
+            data-testid="preview-standby-overlay"
+            @click="togglePlay"
+            class="absolute inset-0 flex flex-col items-center justify-center bg-black/40 hover:bg-black/50 transition-colors cursor-pointer z-10 group"
+          >
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-violet-600/90 text-white shadow-lg transition-transform group-hover:scale-110 group-hover:bg-violet-600">
+              <Play class="h-6 w-6 fill-current translate-x-0.5" />
+            </div>
+            <span class="mt-2 text-xs font-medium text-slate-200 drop-shadow">點擊開始預覽播放</span>
           </div>
 
           <!-- Bottom Floating HUD: Resolution & Bitrate -->

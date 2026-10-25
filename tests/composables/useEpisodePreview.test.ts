@@ -53,7 +53,26 @@ describe('useEpisodePreview composable', () => {
     expect(mockVideo.play).toHaveBeenCalled();
   });
 
-  it('handles video decode error (code 3) gracefully with friendly message mentioning codecs/GStreamer', async () => {
+  it('defers stream attachment until playback starts', async () => {
+    vi.spyOn(Hls, 'isSupported').mockReturnValue(true);
+    const attachMediaSpy = vi.spyOn(Hls.prototype, 'attachMedia');
+
+    const { bindVideoElement, loadPreview, startPlayback, isMediaAttached } = useEpisodePreview();
+    const mockVideo = createMockVideoElement();
+    bindVideoElement(mockVideo);
+
+    await loadPreview('drama1', 'ep1', 1, 'ch1');
+
+    expect(isMediaAttached.value).toBe(false);
+    expect(attachMediaSpy).not.toHaveBeenCalled();
+
+    startPlayback();
+
+    expect(isMediaAttached.value).toBe(true);
+    expect(attachMediaSpy).toHaveBeenCalled();
+  });
+
+  it('handles video decode error (code 3) gracefully with friendly message mentioning codecs/GStreamer and fallback advice', async () => {
     const { bindVideoElement, error } = useEpisodePreview();
     const mockVideo = createMockVideoElement();
     bindVideoElement(mockVideo);
@@ -68,9 +87,10 @@ describe('useEpisodePreview composable', () => {
     }
 
     expect(error.value).toMatch(/解碼|GStreamer/i);
+    expect(error.value).toMatch(/外部播放器/i);
   });
 
-  it('handles video src not supported error (code 4) gracefully with friendly message', async () => {
+  it('handles video src not supported error (code 4) gracefully with friendly message and fallback advice', async () => {
     const { bindVideoElement, error } = useEpisodePreview();
     const mockVideo = createMockVideoElement();
     bindVideoElement(mockVideo);
@@ -85,9 +105,10 @@ describe('useEpisodePreview composable', () => {
     }
 
     expect(error.value).toMatch(/不支援|解碼|GStreamer/i);
+    expect(error.value).toMatch(/外部播放器/i);
   });
 
-  it('handles HLS fatal media error gracefully with informative error message', async () => {
+  it('handles HLS fatal media error gracefully with informative error message and fallback advice', async () => {
     vi.spyOn(Hls, 'isSupported').mockReturnValue(true);
     let capturedErrorHandler: ((event: any, data: any) => void) | null = null;
 
@@ -98,11 +119,12 @@ describe('useEpisodePreview composable', () => {
       return Hls.prototype;
     });
 
-    const { bindVideoElement, loadPreview, error } = useEpisodePreview();
+    const { bindVideoElement, loadPreview, startPlayback, error } = useEpisodePreview();
     const mockVideo = createMockVideoElement();
     bindVideoElement(mockVideo);
 
     await loadPreview('drama1', 'ep1', 1, 'ch1');
+    startPlayback();
 
     expect(capturedErrorHandler).not.toBeNull();
     capturedErrorHandler!(Hls.Events.ERROR, {
@@ -112,6 +134,7 @@ describe('useEpisodePreview composable', () => {
     });
 
     expect(error.value).toMatch(/解碼|GStreamer|bufferAddCodecError/i);
+    expect(error.value).toMatch(/外部播放器/i);
   });
 
   it('toggles play/pause and catches play() rejection gracefully', async () => {
@@ -126,5 +149,6 @@ describe('useEpisodePreview composable', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     expect(error.value).toContain('GStreamer pipeline initialization failed');
+    expect(error.value).toMatch(/外部播放器/i);
   });
 });

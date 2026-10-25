@@ -12,7 +12,7 @@ Finally, available playback channels are currently listed in an arbitrary order 
 
 1. **Cover Artwork Presentation**: Extend drama search results and metadata with cover image URLs. Search results feature visual cover thumbnails alongside titles and tags with graceful lazy loading and placeholder fallbacks, enabling instant visual verification.
 2. **Episode Picker with Right-Side Video Preview Dock**: Refactor the episode section of the current UI so that the episode selection checklist sits on the left while a persistent, live video preview player dock sits directly on the right. Clicking any episode instantaneously switches the preview player to stream that episode's video content without requiring popup dialogs.
-3. **Channel Quality-Descending Sorting**: Automatically sort all available channels in descending order of quality score (from highest resolution and bitrate down to lower formats: e.g., 1080p optimal > 1080p standard > 720p medium). Quality tags and bitrate metrics are displayed on channel options.
+3. **Channel Quality-Descending Sorting**: Automatically sort all available channels in descending order of stream quality (from highest resolution and bitrate down to lower formats: e.g., 1080p optimal > 1080p standard > 720p medium). Quality tags and bitrate metrics are displayed on channel options.
 4. **Detailed Stream Metrics Inspection**: Implement a two-stage stream probe engine (M3U8 Master Playlist tag parsing with an `ffprobe` fallback) that extracts video resolution, stream bitrate, video codec, frame rate, and audio track details. The active stream metrics are presented on the preview player's status overlay and channel selectors with in-memory caching to prevent upstream rate-limiting.
 
 ## User Stories
@@ -81,7 +81,7 @@ Finally, available playback channels are currently listed in an arbitrary order 
 - **In-Memory Probe Cache**:
   - Maintain a thread-safe LRU cache `RwLock<HashMap<(String, String, String), StreamDetails>>` keyed by `(drama_id, ep_id, channel_id)` with a 30-minute TTL to prevent redundant network and process overhead.
 - **Tauri IPC Commands**:
-  - Provide `probe_episode_stream(drama_id, ep_id, channel_id) -> Result<StreamDetails, String>`.
+  - Provide `probe_episode_stream(drama_id, ep_id, channel_id) -> Result<StreamDetails, String>` .
   - Provide `get_episode_preview_stream(drama_id, ep_id, channel_id) -> Result<PreviewStreamInfo, String>`.
 
 ## Testing Decisions
