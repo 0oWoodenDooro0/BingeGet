@@ -299,10 +299,10 @@ const applyRange = () => {
       </div>
     </div>
 
-    <!-- 2-Column Responsive Workspace Layout -->
+    <!-- 2-Column Responsive Workspace Layout: 7:5 Cinema Master Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       <!-- Left Column: Episode Picker Matrix Grid (7 Columns Deck) -->
-      <div data-testid="episode-deck" class="lg:col-span-7 xl:col-span-7 space-y-2">
+      <div data-testid="episode-deck" class="lg:col-span-7 space-y-2">
         <div class="flex items-center justify-between text-xs text-slate-400 pb-1">
           <span>點選預覽可即刻檢視畫面，勾選方塊加入下載</span>
           <span class="text-violet-400 font-medium">預覽中：第 {{ activePreviewEp }} 集</span>
@@ -374,10 +374,10 @@ const applyRange = () => {
         </div>
       </div>
 
-      <!-- Right Column: Episode Preview Dock -->
+      <!-- Right Column: Episode Preview Dock (5 Columns Deck) -->
       <div
         data-testid="preview-dock"
-        class="lg:col-span-5 xl:col-span-5 flex flex-col rounded-xl border border-slate-800 bg-slate-950/60 p-3.5 space-y-3"
+        class="lg:col-span-5 flex flex-col rounded-xl border border-slate-800 bg-slate-950/60 p-3.5 space-y-3"
       >
         <!-- Dock Header -->
         <div class="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
@@ -563,7 +563,7 @@ const applyRange = () => {
             </div>
 
             <div class="rounded bg-slate-950/60 border border-slate-800/60 p-2">
-              <div class="text-slate-400 text-[10px]">實時碼率</div>
+              <div class="text-slate-400 text-[10px]">即時碼率</div>
               <div
                 data-testid="telemetry-bitrate"
                 class="font-mono font-medium text-sky-300 mt-0.5"

@@ -43,7 +43,7 @@ describe('EpisodePicker.vue', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders 7:5 deck layout with episode-deck on left and preview-dock on right', () => {
+  it('renders 7:5 deck layout with episode-deck on left (lg:col-span-7) and preview-dock on right (lg:col-span-5)', () => {
     const wrapper = mount(EpisodePicker, {
       props: {
         episodes: sampleEpisodes,
@@ -53,11 +53,16 @@ describe('EpisodePicker.vue', () => {
       },
     });
 
+    const grid = wrapper.find('.grid.grid-cols-1.lg\\:grid-cols-12.gap-5');
+    expect(grid.exists()).toBe(true);
+
     const episodeDeck = wrapper.find('[data-testid="episode-deck"]');
     expect(episodeDeck.exists()).toBe(true);
+    expect(episodeDeck.classes()).toContain('lg:col-span-7');
 
     const dock = wrapper.find('[data-testid="preview-dock"]');
     expect(dock.exists()).toBe(true);
+    expect(dock.classes()).toContain('lg:col-span-5');
 
     const video = wrapper.find('[data-testid="preview-video"]');
     expect(video.exists()).toBe(true);
