@@ -15,6 +15,9 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
   const error = ref<string>('');
   const isPlaying = ref<boolean>(false);
   const isMuted = ref<boolean>(true);
+  const currentTime = ref<number>(0);
+  const duration = ref<number>(0);
+  const volume = ref<number>(1);
 
   const hlsInstance = shallowRef<Hls | null>(null);
   const videoElement = shallowRef<HTMLVideoElement | null>(null);
@@ -30,11 +33,29 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
     videoElement.value = el;
     if (el) {
       el.muted = isMuted.value;
+      el.volume = volume.value;
       el.onplay = () => {
         isPlaying.value = true;
       };
       el.onpause = () => {
         isPlaying.value = false;
+      };
+      el.ontimeupdate = () => {
+        currentTime.value = el.currentTime;
+      };
+      el.onloadedmetadata = () => {
+        if (!isNaN(el.duration) && isFinite(el.duration)) {
+          duration.value = el.duration;
+        }
+      };
+      el.ondurationchange = () => {
+        if (!isNaN(el.duration) && isFinite(el.duration)) {
+          duration.value = el.duration;
+        }
+      };
+      el.onvolumechange = () => {
+        volume.value = el.volume;
+        isMuted.value = el.muted;
       };
     }
   };
@@ -54,6 +75,24 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
     isMuted.value = videoElement.value.muted;
   };
 
+  const seekTo = (seconds: number) => {
+    if (!videoElement.value) return;
+    const target = Math.max(0, Math.min(seconds, duration.value || seconds));
+    videoElement.value.currentTime = target;
+    currentTime.value = target;
+  };
+
+  const setVolume = (val: number) => {
+    if (!videoElement.value) return;
+    const clamped = Math.max(0, Math.min(1, val));
+    videoElement.value.volume = clamped;
+    volume.value = clamped;
+    if (clamped > 0 && videoElement.value.muted) {
+      videoElement.value.muted = false;
+      isMuted.value = false;
+    }
+  };
+
   const loadPreview = async (
     dramaId: string,
     epId: string,
@@ -63,6 +102,8 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
     activePreviewEp.value = epNumber;
     loading.value = true;
     error.value = '';
+    currentTime.value = 0;
+    duration.value = 0;
 
     cleanup();
 
@@ -91,6 +132,7 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
         info = {
           m3u8_url: `https://mock.stream/${dramaId}/${epId}.m3u8`,
           referer: `https://chinaq.fun/tv-cn/${dramaId}-${epId}.html`,
+          proxy_url: `http://127.0.0.1:8899/proxy?url=https://mock.stream/${dramaId}/${epId}.m3u8`,
         };
         details = {
           resolution: '1920x1080 (1080p)',
@@ -98,28 +140,24 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
           video_codec: 'H.264 / AVC',
           audio_codec: 'AAC',
           fps: 30,
-          has_master_playlist: true,
+          duration_secs: 2700,
         };
       }
 
       previewStreamInfo.value = info;
       streamDetails.value = details;
+      if (details.duration_secs && details.duration_secs > 0) {
+        duration.value = details.duration_secs;
+      }
 
-      if (videoElement.value && info.m3u8_url) {
+      const streamSource = info.proxy_url || info.m3u8_url;
+
+      if (videoElement.value && streamSource) {
         if (Hls.isSupported()) {
           const hls = new Hls({
             enableWorker: false,
-            xhrSetup: (xhr) => {
-              if (info.referer) {
-                try {
-                  xhr.setRequestHeader('X-Referer', info.referer);
-                } catch {
-                  // Browser security may ignore restricted headers
-                }
-              }
-            },
           });
-          hls.loadSource(info.m3u8_url);
+          hls.loadSource(streamSource);
           hls.attachMedia(videoElement.value);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             if (options.autoPlay !== false) {
@@ -136,7 +174,7 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
           typeof videoElement.value.canPlayType === 'function' &&
           videoElement.value.canPlayType('application/vnd.apple.mpegurl')
         ) {
-          videoElement.value.src = info.m3u8_url;
+          videoElement.value.src = streamSource;
           if (options.autoPlay !== false) {
             videoElement.value.play().catch(() => {});
           }
@@ -157,10 +195,15 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
     error,
     isPlaying,
     isMuted,
+    currentTime,
+    duration,
+    volume,
     bindVideoElement,
     loadPreview,
     togglePlay,
     toggleMute,
+    seekTo,
+    setVolume,
     cleanup,
   };
 }

@@ -45,6 +45,24 @@ const KNOWN_CHANNEL_BASELINES: Record<string, { rank: number; badge: ChannelQual
   },
 };
 
+function parseResolutionProfile(resStr: string): {
+  tier: 'optimal' | 'good' | 'medium';
+  label: string;
+  score: number;
+} {
+  const lower = resStr.toLowerCase();
+  if (lower.includes('2160') || lower.includes('4k')) {
+    return { tier: 'optimal', label: '4K', score: 10000 };
+  }
+  if (lower.includes('1080')) {
+    return { tier: 'optimal', label: '1080p', score: 5000 };
+  }
+  if (lower.includes('720')) {
+    return { tier: 'good', label: '720p', score: 2000 };
+  }
+  return { tier: 'medium', label: '標準畫質', score: 500 };
+}
+
 /**
  * Calculates a numerical quality rank score for a channel option.
  * Higher rank represents better resolution and bitrate.
@@ -54,12 +72,8 @@ export function getChannelQualityRank(
   customDetails?: StreamQualityInfo
 ): number {
   if (customDetails) {
-    let score = 0;
-    const res = customDetails.resolution.toLowerCase();
-    if (res.includes('2160') || res.includes('4k')) score += 10000;
-    else if (res.includes('1080')) score += 5000;
-    else if (res.includes('720')) score += 2000;
-    else score += 500;
+    const profile = parseResolutionProfile(customDetails.resolution);
+    let score = profile.score;
 
     const brMatch = customDetails.bitrate.replace(/,/g, '').match(/(\d+)/);
     if (brMatch) {
@@ -85,17 +99,11 @@ export function getChannelQualityBadge(
   customDetails?: StreamQualityInfo
 ): ChannelQualityBadge {
   if (customDetails) {
-    const res = customDetails.resolution;
-    const tier = res.includes('1080') || res.includes('2160')
-      ? 'optimal'
-      : res.includes('720')
-        ? 'good'
-        : 'medium';
-
+    const profile = parseResolutionProfile(customDetails.resolution);
     return {
-      resolution: res.includes('1080') ? '1080p' : res.includes('720') ? '720p' : res,
+      resolution: profile.label,
       bitrate: customDetails.bitrate,
-      tier,
+      tier: profile.tier,
     };
   }
 

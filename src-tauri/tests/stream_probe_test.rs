@@ -1,4 +1,5 @@
-use bingeget::engine::probe::{parse_m3u8_master_tags, parse_ffprobe_json_output};
+use bingeget::engine::probe::{parse_ffprobe_json_output, parse_m3u8_master_tags};
+use bingeget::engine::proxy::rewrite_m3u8;
 
 #[test]
 fn test_parse_m3u8_master_tags_success() {
@@ -12,7 +13,6 @@ fn test_parse_m3u8_master_tags_success() {
 
     assert_eq!(details.resolution, "1920x1080 (1080p)");
     assert_eq!(details.bitrate, "3,198 kbps");
-    assert_eq!(details.has_master_playlist, true);
     assert!(details.video_codec.contains("H.264"));
     assert!(details.audio_codec.contains("AAC"));
 }
@@ -52,7 +52,10 @@ fn test_parse_ffprobe_json_output() {
                 "codec_type": "audio",
                 "bit_rate": "128000"
             }
-        ]
+        ],
+        "format": {
+            "duration": "2700.5"
+        }
     }"#;
 
     let details = parse_ffprobe_json_output(sample_ffprobe_json)
@@ -61,7 +64,30 @@ fn test_parse_ffprobe_json_output() {
     assert_eq!(details.resolution, "1280x720 (720p)");
     assert_eq!(details.bitrate, "1,750 kbps");
     assert_eq!(details.fps, Some(30));
-    assert_eq!(details.has_master_playlist, false);
     assert_eq!(details.video_codec, "h264");
     assert_eq!(details.audio_codec, "aac");
+    assert_eq!(details.duration_secs, Some(2700.5));
+}
+
+#[test]
+fn test_rewrite_m3u8_for_streaming_proxy() {
+    let sample_m3u8 = r#"#EXTM3U
+#EXT-X-VERSION:3
+#EXTINF:6.000,
+seg1.ts
+#EXTINF:6.000,
+https://other.cdn/seg2.ts
+#EXT-X-ENDLIST
+"#;
+
+    let rewritten = rewrite_m3u8(
+        sample_m3u8,
+        "https://cdn.example.com/live/index.m3u8",
+        "https://chinaq.fun/drama-1.html",
+        8899,
+    );
+
+    assert!(rewritten.contains("http://127.0.0.1:8899/proxy?url=https%3A%2F%2Fcdn.example.com%2Flive%2Fseg1.ts"));
+    assert!(rewritten.contains("http://127.0.0.1:8899/proxy?url=https%3A%2F%2Fother.cdn%2Fseg2.ts"));
+    assert!(rewritten.contains("referer=https%3A%2F%2Fchinaq.fun%2Fdrama-1.html"));
 }

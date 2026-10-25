@@ -13,11 +13,12 @@ import {
   useDownloadQueue,
   getErrorMessage,
 } from './composables';
-import type { SeriesConfigModel, SearchResult } from './types';
+import type { SeriesConfigModel, SearchResult, StreamDetails } from './types';
 
 const loading = ref(false);
 const errorMsg = ref('');
 const successMsg = ref('');
+const channelProbeMap = ref<Record<string, StreamDetails>>({});
 
 // System environment detection composable
 const { envInfo } = useSystemEnvironment();
@@ -55,6 +56,7 @@ const handleParse = async (url: string) => {
   loading.value = true;
   errorMsg.value = '';
   successMsg.value = '';
+  channelProbeMap.value = {};
 
   try {
     const data = await parseUrl(url);
@@ -163,11 +165,13 @@ const handleCancel = (ep: number) => {
         <SeriesConfig
           v-model:config="config"
           :totalEpisodes="metadata.episodes.length"
+          :coverUrl="metadata.cover_url"
         />
 
         <ChannelSelector
           :channels="metadata.channels"
           v-model:selectedChannel="selectedChannel"
+          :probeMap="channelProbeMap"
         />
 
         <EpisodePicker

@@ -6,6 +6,7 @@ import {
   sortChannelsByQuality,
   getChannelQualityBadge,
   type StreamQualityInfo,
+  type ChannelQualityBadge,
 } from '../utils/channelQuality';
 
 const props = defineProps<{
@@ -21,6 +22,14 @@ const emit = defineEmits<{
 const sortedChannels = computed(() => {
   return sortChannelsByQuality(props.channels, props.probeMap);
 });
+
+const channelBadgesMap = computed(() => {
+  const map = new Map<string, ChannelQualityBadge>();
+  for (const c of props.channels) {
+    map.set(c.id, getChannelQualityBadge(c.id, props.probeMap?.[c.id]));
+  }
+  return map;
+});
 </script>
 
 <template>
@@ -30,7 +39,7 @@ const sortedChannels = computed(() => {
       <div class="flex items-center gap-2">
         <Radio class="h-4 w-4 text-indigo-400" />
         <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          播放線路 (依畫質高至低排序)
+          播放頻道 (依畫質高至低排序)
         </span>
       </div>
       <div class="flex items-center gap-2">
@@ -38,7 +47,7 @@ const sortedChannels = computed(() => {
           <Sparkles class="h-3 w-3" /> 高畫質優先
         </span>
         <span class="text-xs text-slate-400">
-          共 {{ sortedChannels.length }} 個線路
+          共 {{ sortedChannels.length }} 個頻道
         </span>
       </div>
     </div>
@@ -61,7 +70,7 @@ const sortedChannels = computed(() => {
         <div class="flex items-center justify-between">
           <span class="font-medium text-xs truncate">{{ c.name }}</span>
           <span
-            v-if="getChannelQualityBadge(c.id, probeMap?.[c.id]).tier === 'optimal'"
+            v-if="channelBadgesMap.get(c.id)?.tier === 'optimal'"
             class="text-[10px] text-emerald-400 bg-emerald-950/60 px-1 rounded border border-emerald-800/50 shrink-0 ml-1"
           >
             高畫質
@@ -72,14 +81,14 @@ const sortedChannels = computed(() => {
             data-testid="channel-quality-badge"
             class="font-mono text-slate-300"
           >
-            {{ getChannelQualityBadge(c.id, probeMap?.[c.id]).resolution }}
+            {{ channelBadgesMap.get(c.id)?.resolution }}
           </span>
-          <span v-if="getChannelQualityBadge(c.id, probeMap?.[c.id]).bitrate">·</span>
+          <span v-if="channelBadgesMap.get(c.id)?.bitrate">·</span>
           <span
-            v-if="getChannelQualityBadge(c.id, probeMap?.[c.id]).bitrate"
+            v-if="channelBadgesMap.get(c.id)?.bitrate"
             class="font-mono text-slate-400"
           >
-            {{ getChannelQualityBadge(c.id, probeMap?.[c.id]).bitrate }}
+            {{ channelBadgesMap.get(c.id)?.bitrate }}
           </span>
         </div>
       </div>

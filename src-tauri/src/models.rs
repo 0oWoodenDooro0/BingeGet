@@ -102,7 +102,7 @@ pub struct DownloadProgress {
     pub eta: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/types/generated/")]
 pub struct StreamDetails {
     pub resolution: String,
@@ -110,7 +110,7 @@ pub struct StreamDetails {
     pub video_codec: String,
     pub audio_codec: String,
     pub fps: Option<u32>,
-    pub has_master_playlist: bool,
+    pub duration_secs: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -118,4 +118,5 @@ pub struct StreamDetails {
 pub struct PreviewStreamInfo {
     pub m3u8_url: String,
     pub referer: String,
+    pub proxy_url: Option<String>,
 }

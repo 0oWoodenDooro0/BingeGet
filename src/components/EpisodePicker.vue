@@ -46,7 +46,7 @@ const currentDramaId = computed(() => {
 });
 
 const currentChannelName = computed(() => {
-  if (!props.selectedChannel) return '預設線路';
+  if (!props.selectedChannel) return '預設頻道';
   const found = props.metadata?.channels?.find(c => c.id === props.selectedChannel);
   return found ? found.name : props.selectedChannel;
 });
@@ -58,12 +58,26 @@ const {
   error: streamError,
   isPlaying,
   isMuted,
+  currentTime,
+  duration,
+  volume,
   bindVideoElement,
   loadPreview,
   togglePlay,
   toggleMute,
+  seekTo,
+  setVolume,
   cleanup,
 } = useEpisodePreview({ autoPlay: true });
+
+const formatTime = (secs: number) => {
+  if (isNaN(secs) || secs <= 0) return '00:00';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  const mm = m < 10 ? '0' + m : m;
+  const ss = s < 10 ? '0' + s : s;
+  return `${mm}:${ss}`;
+};
 
 // Bind video ref
 onMounted(() => {
@@ -281,7 +295,7 @@ const applyRange = () => {
         </div>
       </div>
 
-      <!-- Right Column: Video Preview Dock -->
+      <!-- Right Column: Episode Preview Dock -->
       <div
         data-testid="preview-dock"
         class="lg:col-span-5 xl:col-span-5 flex flex-col rounded-xl border border-slate-800 bg-slate-950/60 p-3.5 space-y-3"
@@ -291,10 +305,14 @@ const applyRange = () => {
           <div class="flex items-center gap-2">
             <Tv class="h-4 w-4 text-violet-400" />
             <span class="text-xs font-semibold text-slate-200">
-              影片預覽 (第 {{ activePreviewEp }} 集)
+              集數預覽 (第 {{ activePreviewEp }} 集)
             </span>
           </div>
-          <span class="text-[11px] text-slate-400 font-mono truncate max-w-[150px]" :title="currentChannelName">
+          <span
+            data-testid="channel-indicator"
+            class="text-[11px] text-slate-400 font-mono truncate max-w-[150px]"
+            :title="currentChannelName"
+          >
             {{ currentChannelName }}
           </span>
         </div>
@@ -366,10 +384,30 @@ const applyRange = () => {
           </div>
         </div>
 
+        <!-- Timeline Scrubber & Progress Display -->
+        <div class="flex items-center gap-2 pt-1">
+          <input
+            data-testid="timeline-scrubber"
+            type="range"
+            min="0"
+            :max="duration > 0 ? duration : 100"
+            step="1"
+            :value="currentTime"
+            @input="seekTo(Number(($event.target as HTMLInputElement).value))"
+            class="h-1.5 w-full cursor-pointer appearance-none rounded-lg bg-slate-800 accent-violet-500 hover:bg-slate-700"
+          />
+          <span
+            data-testid="timeline-time-display"
+            class="text-[10px] font-mono text-slate-400 shrink-0 select-none"
+          >
+            {{ formatTime(currentTime) }} / {{ formatTime(duration) }}
+          </span>
+        </div>
+
         <!-- Video Player Controls & Quick Actions -->
-        <div class="flex items-center justify-between gap-2 pt-1 text-xs">
+        <div class="flex items-center justify-between gap-2 text-xs">
           <!-- Player Controls -->
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-2">
             <button
               type="button"
               data-testid="btn-play-pause"
@@ -390,7 +428,18 @@ const applyRange = () => {
               <VolumeX v-if="isMuted" class="h-3.5 w-3.5 text-slate-400" />
               <Volume2 v-else class="h-3.5 w-3.5 text-violet-400" />
             </button>
-            <span class="text-[11px] text-slate-400 pl-1">預設靜音</span>
+            <!-- Continuous Volume Slider -->
+            <input
+              data-testid="volume-slider"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              :value="volume"
+              @input="setVolume(Number(($event.target as HTMLInputElement).value))"
+              class="h-1.5 w-14 cursor-pointer appearance-none rounded-lg bg-slate-800 accent-violet-500"
+              aria-label="音量控制"
+            />
           </div>
 
           <!-- Quick Toggle for Current Preview Episode in Download List -->

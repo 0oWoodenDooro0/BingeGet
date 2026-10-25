@@ -91,7 +91,7 @@ pub fn parse_m3u8_master_tags(m3u8_content: &str) -> Option<StreamDetails> {
             video_codec: "H.264 / AVC".to_string(),
             audio_codec: "AAC".to_string(),
             fps: Some(30),
-            has_master_playlist: true,
+            duration_secs: None,
         });
     }
 
@@ -109,8 +109,14 @@ struct FfprobeStream {
 }
 
 #[derive(Deserialize)]
+struct FfprobeFormat {
+    duration: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct FfprobeOutput {
     streams: Option<Vec<FfprobeStream>>,
+    format: Option<FfprobeFormat>,
 }
 
 pub fn parse_ffprobe_json_output(json_str: &str) -> Result<StreamDetails> {
@@ -166,13 +172,19 @@ pub fn parse_ffprobe_json_output(json_str: &str) -> Result<StreamDetails> {
     let kbps = raw_bitrate / 1000;
     let bitrate = format!("{} kbps", format_number_commas(kbps));
 
+    let duration_secs = output
+        .format
+        .as_ref()
+        .and_then(|f| f.duration.as_deref())
+        .and_then(|d| d.parse::<f64>().ok());
+
     Ok(StreamDetails {
         resolution,
         bitrate,
         video_codec,
         audio_codec,
         fps,
-        has_master_playlist: false,
+        duration_secs,
     })
 }
 
@@ -187,6 +199,7 @@ pub fn probe_with_ffprobe(
         .arg("-print_format")
         .arg("json")
         .arg("-show_streams")
+        .arg("-show_format")
         .arg("-analyzeduration")
         .arg("3000000")
         .arg("-probesize")
@@ -260,21 +273,21 @@ pub async fn probe_stream_core(
             if let Some(probe_bin) = ffprobe_path {
                 probe_with_ffprobe(probe_bin, &m3u8_url, Some(&referer))
                     .unwrap_or_else(|_| StreamDetails {
-                        resolution: "1920x1080 (1080p)".to_string(),
-                        bitrate: "2,800 kbps".to_string(),
-                        video_codec: "H.264 / AVC".to_string(),
-                        audio_codec: "AAC".to_string(),
-                        fps: Some(30),
-                        has_master_playlist: false,
+                        resolution: "未知 (需 ffprobe)".to_string(),
+                        bitrate: "未知".to_string(),
+                        video_codec: "未知".to_string(),
+                        audio_codec: "未知".to_string(),
+                        fps: None,
+                        duration_secs: None,
                     })
             } else {
                 StreamDetails {
-                    resolution: "1920x1080 (1080p)".to_string(),
-                    bitrate: "3,000 kbps".to_string(),
-                    video_codec: "H.264 / AVC".to_string(),
-                    audio_codec: "AAC".to_string(),
-                    fps: Some(30),
-                    has_master_playlist: false,
+                    resolution: "未知 (需 ffprobe)".to_string(),
+                    bitrate: "未知".to_string(),
+                    video_codec: "未知".to_string(),
+                    audio_codec: "未知".to_string(),
+                    fps: None,
+                    duration_secs: None,
                 }
             }
         }

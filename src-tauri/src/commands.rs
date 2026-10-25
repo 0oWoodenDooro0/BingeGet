@@ -163,7 +163,20 @@ pub async fn get_episode_preview_stream(
     let m3u8_url = fetch_episode_m3u8_core(&client, &drama_id, &ep_id, &channel).await?;
     let chinaq = ChinaQExtractor::new();
     let referer = chinaq.build_episode_referer("", &drama_id, &ep_id);
-    Ok(PreviewStreamInfo { m3u8_url, referer })
+
+    let proxy_port = crate::engine::proxy::start_streaming_proxy(client.inner().clone())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let proxy_url = Some(crate::engine::proxy::build_proxy_url(
+        proxy_port, &m3u8_url, &referer,
+    ));
+
+    Ok(PreviewStreamInfo {
+        m3u8_url,
+        referer,
+        proxy_url,
+    })
 }
 
 #[tauri::command]

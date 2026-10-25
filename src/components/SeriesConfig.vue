@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { Folder, Sliders, Layers } from 'lucide-vue-next';
+import { ref } from 'vue';
+import { Folder, Sliders, Layers, Film } from 'lucide-vue-next';
 import type { SeriesConfigModel } from '../types';
 
 const props = defineProps<{
   config: SeriesConfigModel;
   totalEpisodes: number;
+  coverUrl?: string | null;
 }>();
 
 const emit = defineEmits<{
   (e: 'update:config', val: SeriesConfigModel): void;
 }>();
+
+const imageError = ref(false);
 
 const concurrentOptions = [
   { value: 1, label: '1 集' },
@@ -62,41 +66,62 @@ const handleBrowseDir = async () => {
         </span>
       </div>
 
-      <div class="grid grid-cols-3 gap-3">
-        <div class="col-span-2">
-          <label class="block text-xs text-slate-400 mb-1">
-            劇名 <span class="text-rose-400">*</span>
-          </label>
-          <input
-            :value="config.customTitle"
-            @input="updateField('customTitle', ($event.target as HTMLInputElement).value)"
-            type="text"
-            data-testid="series-title-input"
-            placeholder="請輸入劇名"
-            class="w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+      <div class="flex gap-3 items-start">
+        <!-- Series Cover Artwork Display -->
+        <div
+          data-testid="series-header-cover"
+          class="w-16 h-22 rounded-lg border border-slate-700 bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center relative shadow-sm"
+        >
+          <img
+            v-if="coverUrl && !imageError"
+            :src="coverUrl"
+            @error="imageError = true"
+            alt="影集封面"
+            class="w-full h-full object-cover"
+            loading="lazy"
           />
+          <Film v-else class="h-6 w-6 text-slate-500" />
         </div>
 
-        <div>
-          <label class="block text-xs text-slate-400 mb-1">季數</label>
-          <div class="relative">
-            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-xs text-slate-400">S</span>
-            <input
-              :value="config.season"
-              @input="updateField('season', parseInt(($event.target as HTMLInputElement).value) || 1)"
-              type="number"
-              min="1"
-              max="99"
-              class="w-full rounded-lg border border-slate-700 bg-slate-800/80 py-2 pl-7 pr-3 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
-            />
+        <!-- Title & Season Inputs -->
+        <div class="flex-1 space-y-2">
+          <div class="grid grid-cols-3 gap-2">
+            <div class="col-span-2">
+              <label class="block text-xs text-slate-400 mb-1">
+                劇名 <span class="text-rose-400">*</span>
+              </label>
+              <input
+                :value="config.customTitle"
+                @input="updateField('customTitle', ($event.target as HTMLInputElement).value)"
+                type="text"
+                data-testid="series-title-input"
+                placeholder="請輸入劇名"
+                class="w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">季數</label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 text-xs text-slate-400">S</span>
+                <input
+                  :value="config.season"
+                  @input="updateField('season', parseInt(($event.target as HTMLInputElement).value) || 1)"
+                  type="number"
+                  min="1"
+                  max="99"
+                  class="w-full rounded-lg border border-slate-700 bg-slate-800/80 py-1.5 pl-6 pr-2 text-sm text-slate-100 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="text-[11px] text-slate-400 font-mono bg-slate-950/40 px-2 py-1 rounded border border-slate-800/50 flex items-center gap-1.5">
+            <span class="text-indigo-400 font-medium truncate">
+              {{ config.customTitle.trim() || '劇名' }} - S{{ config.season < 10 ? '0' + config.season : config.season }}E01.mp4
+            </span>
           </div>
         </div>
-      </div>
-
-      <div class="text-[11px] text-slate-400 font-mono bg-slate-950/40 px-2.5 py-1.5 rounded border border-slate-800/50 flex items-center gap-1.5">
-        <span class="text-indigo-400 font-medium truncate">
-          {{ config.customTitle.trim() || '劇名' }} - S{{ config.season < 10 ? '0' + config.season : config.season }}E01.mp4
-        </span>
       </div>
     </div>
 
@@ -137,7 +162,7 @@ const handleBrowseDir = async () => {
       <div class="grid grid-cols-2 gap-3 pt-1">
         <div>
           <div class="flex justify-between text-xs text-slate-400 mb-1">
-            <span>切片線程</span>
+            <span>分片線程</span>
             <span class="text-indigo-400 font-medium">{{ config.threads }}</span>
           </div>
           <input
@@ -157,7 +182,7 @@ const handleBrowseDir = async () => {
           </div>
           <select
             :value="config.maxConcurrent"
-            @change="updateField('maxConcurrent', parseInt(($event.target as HTMLSelectElement).value))"
+            @change="updateField('maxConcurrent', parseInt(($event.target as HTMLSelectElement).value))"\
             class="w-full rounded-lg border border-slate-700 bg-slate-800/80 px-2 py-1.5 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none"
           >
             <option
