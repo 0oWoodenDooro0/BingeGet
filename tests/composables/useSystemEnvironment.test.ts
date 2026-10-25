@@ -37,6 +37,7 @@ describe('useSystemEnvironment composable', () => {
     expect(result.is_ready).toBe(true);
     expect(result.ffmpeg_path).toBe('/usr/bin/ffmpeg');
     expect(result.nm3u8dl_path).toBe('/usr/bin/n-m3u8dl-re');
+    expect(result.gstreamer_ready).toBe(true);
     expect(envInfo.value).toEqual(result);
   });
 
@@ -45,6 +46,7 @@ describe('useSystemEnvironment composable', () => {
       nm3u8dl_path: '/custom/nm3u8dl-re',
       ffmpeg_path: '/custom/ffmpeg',
       is_ready: true,
+      gstreamer_ready: true,
     };
 
     vi.doMock('@tauri-apps/api/core', () => ({

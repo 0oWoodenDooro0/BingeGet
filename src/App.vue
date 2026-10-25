@@ -140,6 +140,16 @@ const handleCancel = (ep: number) => {
         </span>
       </div>
 
+      <!-- GStreamer Alert Banner (only visible if Linux environment lacks GStreamer playbin) -->
+      <div v-if="envInfo && envInfo.gstreamer_ready === false" class="flex items-center justify-between rounded-lg border border-yellow-500/30 bg-yellow-950/20 px-3.5 py-2 text-xs text-yellow-300">
+        <div class="flex items-center gap-2">
+          <ShieldAlert class="h-4 w-4 text-yellow-400 shrink-0" />
+          <span>
+            多媒體警告：檢測到 Linux 環境缺少 GStreamer 解碼外掛 (如 gst-plugins-good / gst-libav)，內嵌預覽可能無法播放。若遇播放卡頓可使用「複製串流網址」改以外部播放器 (如 VLC / mpv) 開啟。
+          </span>
+        </div>
+      </div>
+
       <!-- Error / Alert Banner -->
       <div v-if="errorMsg" class="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300">
         <AlertTriangle class="h-4 w-4 shrink-0 text-rose-400" />

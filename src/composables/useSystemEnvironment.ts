@@ -35,6 +35,7 @@ export function useSystemEnvironment(options: UseSystemEnvironmentOptions = {}) 
           nm3u8dl_path: null,
           ffmpeg_path: null,
           is_ready: false,
+          gstreamer_ready: undefined,
         };
         envInfo.value = fallback;
         return fallback;
@@ -44,6 +45,7 @@ export function useSystemEnvironment(options: UseSystemEnvironmentOptions = {}) 
         nm3u8dl_path: '/usr/bin/n-m3u8dl-re',
         ffmpeg_path: '/usr/bin/ffmpeg',
         is_ready: true,
+        gstreamer_ready: true,
       };
       envInfo.value = mockEnv;
       return mockEnv;

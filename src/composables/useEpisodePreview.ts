@@ -1,25 +1,12 @@
 import { ref, shallowRef } from 'vue';
 import Hls from 'hls.js';
 import type { StreamDetails, PreviewStreamInfo } from '../types';
+import { FALLBACK_HINT, getMediaErrorMessage } from '../types';
 import { isTauri, getErrorMessage } from './useSystemEnvironment';
 
 export interface UseEpisodePreviewOptions {
   autoPlay?: boolean;
 }
-
-const MEDIA_ERR_ABORTED = typeof MediaError !== 'undefined' ? MediaError.MEDIA_ERR_ABORTED : 1;
-const MEDIA_ERR_NETWORK = typeof MediaError !== 'undefined' ? MediaError.MEDIA_ERR_NETWORK : 2;
-const MEDIA_ERR_DECODE = typeof MediaError !== 'undefined' ? MediaError.MEDIA_ERR_DECODE : 3;
-const MEDIA_ERR_SRC_NOT_SUPPORTED = typeof MediaError !== 'undefined' ? MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED : 4;
-
-const FALLBACK_HINT = '建議檢查本機解碼器或複製串流網址至外部播放器 (如 VLC / mpv) 播放';
-
-const MEDIA_ERROR_MESSAGES: Record<number, string> = {
-  [MEDIA_ERR_ABORTED]: '影片載入已中止',
-  [MEDIA_ERR_NETWORK]: `網路連線異常，無法載入影片串流。${FALLBACK_HINT}`,
-  [MEDIA_ERR_DECODE]: `影片解碼失敗，可能是系統缺少解碼器 (如 Linux GStreamer 外掛程式)。${FALLBACK_HINT}`,
-  [MEDIA_ERR_SRC_NOT_SUPPORTED]: `不支援的影片格式或系統缺少相應解碼器 (如 Linux GStreamer 外掛程式)。${FALLBACK_HINT}`,
-};
 
 export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
   const autoPlay = options.autoPlay === true;
@@ -163,12 +150,7 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
           error.value = `播放器發生未知錯誤。${FALLBACK_HINT}`;
           return;
         }
-        const matchedMsg = MEDIA_ERROR_MESSAGES[mediaErr.code];
-        if (matchedMsg) {
-          error.value = matchedMsg;
-        } else {
-          error.value = `影片播放錯誤: ${mediaErr.message || '未知錯誤'}。${FALLBACK_HINT}`;
-        }
+        error.value = getMediaErrorMessage(mediaErr.code);
       };
 
       if (autoPlay && currentStreamSource.value && !isMediaAttached.value) {

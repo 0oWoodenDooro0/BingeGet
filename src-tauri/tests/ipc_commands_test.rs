@@ -43,4 +43,6 @@ fn test_detect_system_environment() {
     assert!(env.nm3u8dl_path.is_some());
     assert!(env.ffmpeg_path.is_some());
     assert!(env.is_ready);
+    #[cfg(target_os = "linux")]
+    assert!(env.gstreamer_ready.is_some());
 }

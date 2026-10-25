@@ -48,6 +48,8 @@ pub struct SystemEnvironment {
     pub nm3u8dl_path: Option<String>,
     pub ffmpeg_path: Option<String>,
     pub is_ready: bool,
+    #[ts(optional)]
+    pub gstreamer_ready: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

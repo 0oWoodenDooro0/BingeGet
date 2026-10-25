@@ -12,6 +12,9 @@ export type { DownloadProgress } from './generated/DownloadProgress';
 export type { StreamDetails } from './generated/StreamDetails';
 export type { PreviewStreamInfo } from './generated/PreviewStreamInfo';
 
+// Media error and preview definitions
+export * from './media';
+
 // UI Specific state models
 export interface SeriesConfigModel {
   customTitle: string;

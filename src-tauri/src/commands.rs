@@ -31,10 +31,27 @@ pub fn detect_system_environment_core() -> SystemEnvironment {
     let ffmpeg_path = check_path("ffmpeg", "/usr/bin/ffmpeg");
     let is_ready = nm3u8dl_path.is_some() && ffmpeg_path.is_some();
 
+    #[cfg(target_os = "linux")]
+    let gstreamer_ready = {
+        let has_gst = check_path("gst-inspect-1.0", "/usr/bin/gst-inspect-1.0").is_some();
+        if has_gst {
+            let output = std::process::Command::new("gst-inspect-1.0")
+                .arg("playbin")
+                .output();
+            Some(output.map(|o| o.status.success()).unwrap_or(false))
+        } else {
+            Some(false)
+        }
+    };
+
+    #[cfg(not(target_os = "linux"))]
+    let gstreamer_ready: Option<bool> = None;
+
     SystemEnvironment {
         nm3u8dl_path,
         ffmpeg_path,
         is_ready,
+        gstreamer_ready,
     }
 }
 
