@@ -134,6 +134,20 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
         if (!isNaN(el.duration) && isFinite(el.duration)) {
           duration.value = el.duration;
         }
+        if (el.videoWidth > 0 && el.videoHeight > 0) {
+          const w = el.videoWidth;
+          const h = el.videoHeight;
+          const tier = h >= 2160 ? '4K' : h >= 1080 ? '1080p' : h >= 720 ? '720p' : h >= 480 ? '480p' : '';
+          const resStr = tier ? `${w}x${h} (${tier})` : `${w}x${h}`;
+          if (streamDetails.value) {
+            if (!streamDetails.value.resolution || streamDetails.value.resolution.includes('未知') || streamDetails.value.resolution.includes('需 ffprobe')) {
+              streamDetails.value = {
+                ...streamDetails.value,
+                resolution: resStr,
+              };
+            }
+          }
+        }
       };
       el.ondurationchange = () => {
         if (!isNaN(el.duration) && isFinite(el.duration)) {
@@ -194,6 +208,7 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
     error.value = '';
     currentTime.value = 0;
     duration.value = 0;
+    streamDetails.value = null;
 
     cleanup();
 

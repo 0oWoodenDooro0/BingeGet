@@ -91,3 +91,43 @@ https://other.cdn/seg2.ts
     assert!(rewritten.contains("http://127.0.0.1:8899/proxy?url=https%3A%2F%2Fother.cdn%2Fseg2.ts"));
     assert!(rewritten.contains("referer=https%3A%2F%2Fchinaq.fun%2Fdrama-1.html"));
 }
+
+#[test]
+fn test_rewrite_m3u8_with_encryption_key_and_map_tags() {
+    let sample_m3u8 = r#"#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
+#EXT-X-KEY:METHOD=AES-128,URI="enc.key",IV=0x00000000000000000000000000000000
+#EXT-X-MAP:URI="init.mp4"
+#EXTINF:10.000000,
+segment1.ts
+#EXT-X-ENDLIST
+"#;
+
+    let rewritten = rewrite_m3u8(
+        sample_m3u8,
+        "https://hd.kuktxu.com/play/eXDM31ve/index.m3u8",
+        "https://chinaq.fun/tv-cn/202639642/ep1.html",
+        37099,
+    );
+
+    // The encryption key URI must be rewritten to route through our local proxy
+    assert!(
+        rewritten.contains("URI=\"http://127.0.0.1:37099/proxy?url=https%3A%2F%2Fhd.kuktxu.com%2Fplay%2FeXDM31ve%2Fenc.key&referer=https%3A%2F%2Fchinaq.fun%2Ftv-cn%2F202639642%2Fep1.html\""),
+        "Encryption key URI must be rewritten to proxy URL, got:\n{}",
+        rewritten
+    );
+
+    // The map URI must also be rewritten to route through proxy
+    assert!(
+        rewritten.contains("URI=\"http://127.0.0.1:37099/proxy?url=https%3A%2F%2Fhd.kuktxu.com%2Fplay%2FeXDM31ve%2Finit.mp4&referer=https%3A%2F%2Fchinaq.fun%2Ftv-cn%2F202639642%2Fep1.html\""),
+        "Map URI must be rewritten to proxy URL, got:\n{}",
+        rewritten
+    );
+
+    // Media segment must also be rewritten
+    assert!(
+        rewritten.contains("http://127.0.0.1:37099/proxy?url=https%3A%2F%2Fhd.kuktxu.com%2Fplay%2FeXDM31ve%2Fsegment1.ts"),
+        "Segment must be rewritten to proxy URL"
+    );
+}

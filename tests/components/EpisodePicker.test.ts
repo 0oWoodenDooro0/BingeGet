@@ -161,6 +161,37 @@ describe('EpisodePicker.vue', () => {
     expect(currentChangeEventsCount).toBe(initialChangeEventsCount);
   });
 
+  it('allows selecting episode by clicking anywhere on episode card (title, body) except preview button', async () => {
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: 'ikzy',
+      },
+    });
+
+    const ep2Card = wrapper.find('[data-testid="episode-item"][data-episode-number="2"]');
+    expect(ep2Card.exists()).toBe(true);
+
+    // Clicking the card body outside the preview button toggles selection
+    await ep2Card.trigger('click');
+    const updateEvents = wrapper.emitted('update:selectedEpisodes');
+    expect(updateEvents).toBeTruthy();
+    expect(updateEvents![0]).toEqual([[1, 2]]);
+
+    // Clicking episode title inside card also toggles selection
+    const ep3Title = wrapper.find('[data-testid="episode-title"][data-episode-title="3"]');
+    expect(ep3Title.exists()).toBe(true);
+    await ep3Title.trigger('click');
+    expect(updateEvents![1]).toEqual([[1, 3]]);
+
+    // Clicking preview button does NOT trigger toggle
+    const ep3PreviewBtn = wrapper.find('[data-testid="btn-preview-episode"][data-episode-preview="3"]');
+    await ep3PreviewBtn.trigger('click');
+    expect(updateEvents!.length).toBe(2);
+  });
+
   it('supports batch selection toolbar placed inside episode-deck: select-all, clear-all, select-first-10, and select-first-20', async () => {
     const twentyFiveEpisodes: EpisodeInfo[] = Array.from({ length: 25 }, (_, i) => ({
       ep_number: i + 1,
@@ -431,7 +462,7 @@ describe('EpisodePicker.vue', () => {
     expect(codecs.text()).not.toContain('ffprobe');
   });
 
-  it('renders clean unprobed placeholders and unprobed badge when channelProbeMap is empty or missing', async () => {
+  it('renders clean unprobed placeholders and unprobed badge when probe data is empty or missing', async () => {
     const wrapper = mount(EpisodePicker, {
       props: {
         episodes: sampleEpisodes,
@@ -441,9 +472,6 @@ describe('EpisodePicker.vue', () => {
         channelProbeMap: {},
       },
     });
-
-    await new Promise((r) => setTimeout(r, 10));
-    await wrapper.vm.$nextTick();
 
     const telemetry = wrapper.find('[data-testid="telemetry-dashboard"]');
     expect(telemetry.exists()).toBe(true);
@@ -578,5 +606,32 @@ describe('EpisodePicker.vue', () => {
     await retryBtn.trigger('click');
     const changeEvents = wrapper.emitted('change-preview');
     expect(changeEvents).toBeTruthy();
+  });
+
+  it('falls back to preview streamDetails and emits probe-complete when channelProbeMap does not have the channel', async () => {
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: 'ikzy',
+        channelProbeMap: {},
+      },
+    });
+
+    // Wait for async loadPreview to resolve
+    await new Promise((r) => setTimeout(r, 20));
+    await wrapper.vm.$nextTick();
+
+    const probeCompleteEvents = wrapper.emitted('probe-complete');
+    expect(probeCompleteEvents).toBeTruthy();
+    expect(probeCompleteEvents![0][0]).toEqual(
+      expect.objectContaining({
+        channel: 'ikzy',
+      })
+    );
+
+    const badge = wrapper.find('[data-testid="telemetry-status-badge"]');
+    expect(badge.attributes('data-probed')).toBe('true');
   });
 });

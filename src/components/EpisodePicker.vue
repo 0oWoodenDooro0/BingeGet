@@ -37,6 +37,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   (e: 'update:selectedEpisodes', val: number[]): void;
   (e: 'change-preview', epNum: number): void;
+  (e: 'probe-complete', payload: { channel: string; details: StreamDetails }): void;
 }>();
 
 const videoRef = ref<HTMLVideoElement | null>(null);
@@ -56,6 +57,7 @@ const currentChannelName = computed(() => {
 
 const {
   activePreviewEp,
+  streamDetails,
   currentStreamSource,
   loading: loadingStream,
   error: streamError,
@@ -72,6 +74,13 @@ const {
   setVolume,
   cleanup,
 } = useEpisodePreview({ autoPlay: false });
+
+// Emit probe-complete when streamDetails updates for the active channel
+watch(streamDetails, (newDetails) => {
+  if (newDetails && props.selectedChannel) {
+    emit('probe-complete', { channel: props.selectedChannel, details: newDetails });
+  }
+});
 
 const createProgressGradient = (percent: number) => {
   const clamped = Math.min(100, Math.max(0, percent));
@@ -90,8 +99,13 @@ const volumeStyle = computed(() => {
 });
 
 const rawProbeData = computed(() => {
+  // Prefer channel probe map if available for current channel
   if (props.selectedChannel && props.channelProbeMap?.[props.selectedChannel]) {
     return props.channelProbeMap[props.selectedChannel];
+  }
+  // Fall back to active preview streamDetails
+  if (streamDetails.value) {
+    return streamDetails.value;
   }
   return null;
 });
@@ -354,7 +368,7 @@ const applyRange = () => {
         </div>
 
         <div class="flex items-center justify-between text-xs text-slate-400 pb-1">
-          <span>點選預覽可即刻檢視畫面，勾選方塊加入下載</span>
+          <span>點選預覽可即刻檢視畫面，點選集數卡片或勾選方塊加入下載</span>
           <span class="text-violet-400 font-medium">預覽中：第 {{ activePreviewEp }} 集</span>
         </div>
 
@@ -364,8 +378,9 @@ const applyRange = () => {
             :key="ep.ep_number"
             data-testid="episode-item"
             :data-episode-number="ep.ep_number"
+            @click="toggleEpisode(ep.ep_number)"
             :class="[
-              'group flex items-center justify-between rounded-lg border p-2 text-xs select-none transition-all',
+              'group flex items-center justify-between rounded-lg border p-2 text-xs select-none transition-all cursor-pointer',
               activePreviewEp === ep.ep_number
                 ? 'border-violet-500 bg-violet-950/40 text-violet-100 ring-2 ring-violet-500/50 shadow-md shadow-violet-950/50'
                 : selectedEpisodes.includes(ep.ep_number)

@@ -1,10 +1,16 @@
 use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::LazyLock;
 use anyhow::Result;
+use regex::Regex;
 use reqwest::Url;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 static PROXY_PORT: AtomicU16 = AtomicU16::new(0);
+
+static URI_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"URI="([^"]+)""#).expect("Invalid URI attr regex")
+});
 
 pub fn get_proxy_port() -> u16 {
     PROXY_PORT.load(Ordering::SeqCst)
@@ -25,9 +31,42 @@ pub fn rewrite_m3u8(content: &str, base_url: &str, referer: &str, port: u16) -> 
 
     for line in content.lines() {
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
+        if trimmed.is_empty() {
             out.push_str(line);
             out.push('\n');
+            continue;
+        }
+
+        if trimmed.starts_with('#') {
+            // Check if this tag contains a URI attribute, e.g.
+            // #EXT-X-KEY:METHOD=AES-128,URI="enc.key",IV=...
+            // #EXT-X-MAP:URI="init.mp4"
+            if trimmed.contains("URI=") {
+                let rewritten_line = URI_ATTR_RE.replace_all(line, |caps: &regex::Captures| {
+                    if let Some(m) = caps.get(1) {
+                        let inner_uri = m.as_str();
+                        let abs_url = if inner_uri.starts_with("http://") || inner_uri.starts_with("https://") {
+                            inner_uri.to_string()
+                        } else if let Some(ref b) = base {
+                            match b.join(inner_uri) {
+                                Ok(joined) => joined.to_string(),
+                                Err(_) => inner_uri.to_string(),
+                            }
+                        } else {
+                            inner_uri.to_string()
+                        };
+                        let proxy_url = build_proxy_url(port, &abs_url, referer);
+                        format!("URI=\"{}\"", proxy_url)
+                    } else {
+                        caps[0].to_string()
+                    }
+                });
+                out.push_str(&rewritten_line);
+                out.push('\n');
+            } else {
+                out.push_str(line);
+                out.push('\n');
+            }
             continue;
         }
 
@@ -128,17 +167,40 @@ Content-Length: 0\r\n\
         req = req.header("Referer", &ref_str);
     }
 
+    // Forward Range header if requested by player
+    for line in req_str.lines() {
+        if line.to_ascii_lowercase().starts_with("range:") {
+            if let Some((_, val)) = line.split_once(':') {
+                req = req.header("Range", val.trim());
+                break;
+            }
+        }
+    }
+
     let upstream_res = req.send().await;
 
     match upstream_res {
         Ok(res) => {
             let status = res.status();
+            let reason = status.canonical_reason().unwrap_or("OK");
             let content_type = res
                 .headers()
                 .get(reqwest::header::CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("application/octet-stream")
                 .to_string();
+
+            let mut extra_headers = String::new();
+            if let Some(cr) = res.headers().get(reqwest::header::CONTENT_RANGE) {
+                if let Ok(cr_str) = cr.to_str() {
+                    extra_headers.push_str(&format!("Content-Range: {}\r\n", cr_str));
+                }
+            }
+            if let Some(ar) = res.headers().get(reqwest::header::ACCEPT_RANGES) {
+                if let Ok(ar_str) = ar.to_str() {
+                    extra_headers.push_str(&format!("Accept-Ranges: {}\r\n", ar_str));
+                }
+            }
 
             let bytes = match res.bytes().await {
                 Ok(b) => b,
@@ -160,29 +222,37 @@ Content-Length: 0\r\n\
                 let rewritten_bytes = rewritten.into_bytes();
 
                 let header = format!(
-                    "HTTP/1.1 {} OK\r\n\
+                    "HTTP/1.1 {} {}\r\n\
 Access-Control-Allow-Origin: *\r\n\
 Access-Control-Allow-Methods: GET, OPTIONS\r\n\
+Access-Control-Allow-Headers: *\r\n\
 Content-Type: application/vnd.apple.mpegurl\r\n\
 Content-Length: {}\r\n\
+{}\
 \r\n",
                     status.as_u16(),
-                    rewritten_bytes.len()
+                    reason,
+                    rewritten_bytes.len(),
+                    extra_headers
                 );
 
                 let _ = stream.write_all(header.as_bytes()).await;
                 let _ = stream.write_all(&rewritten_bytes).await;
             } else {
                 let header = format!(
-                    "HTTP/1.1 {} OK\r\n\
+                    "HTTP/1.1 {} {}\r\n\
 Access-Control-Allow-Origin: *\r\n\
 Access-Control-Allow-Methods: GET, OPTIONS\r\n\
+Access-Control-Allow-Headers: *\r\n\
 Content-Type: {}\r\n\
 Content-Length: {}\r\n\
+{}\
 \r\n",
                     status.as_u16(),
+                    reason,
                     content_type,
-                    bytes.len()
+                    bytes.len(),
+                    extra_headers
                 );
 
                 let _ = stream.write_all(header.as_bytes()).await;

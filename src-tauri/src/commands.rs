@@ -11,29 +11,29 @@ use crate::models::{
     SystemEnvironment,
 };
 
-pub fn detect_system_environment_core() -> SystemEnvironment {
-    let check_path = |name: &str, preferred: &str| -> Option<String> {
-        if Path::new(preferred).is_file() {
-            return Some(preferred.to_string());
-        }
-        if let Some(paths) = std::env::var_os("PATH") {
-            for dir in std::env::split_paths(&paths) {
-                let full = dir.join(name);
-                if full.is_file() {
-                    return Some(full.to_string_lossy().to_string());
-                }
+pub fn resolve_binary_path(name: &str, preferred: &str) -> Option<String> {
+    if Path::new(preferred).is_file() {
+        return Some(preferred.to_string());
+    }
+    if let Some(paths) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&paths) {
+            let full = dir.join(name);
+            if full.is_file() {
+                return Some(full.to_string_lossy().to_string());
             }
         }
-        None
-    };
+    }
+    None
+}
 
-    let nm3u8dl_path = check_path("n-m3u8dl-re", "/usr/bin/n-m3u8dl-re");
-    let ffmpeg_path = check_path("ffmpeg", "/usr/bin/ffmpeg");
+pub fn detect_system_environment_core() -> SystemEnvironment {
+    let nm3u8dl_path = resolve_binary_path("n-m3u8dl-re", "/usr/bin/n-m3u8dl-re");
+    let ffmpeg_path = resolve_binary_path("ffmpeg", "/usr/bin/ffmpeg");
     let is_ready = nm3u8dl_path.is_some() && ffmpeg_path.is_some();
 
     #[cfg(target_os = "linux")]
     let gstreamer_ready = {
-        let has_gst = check_path("gst-inspect-1.0", "/usr/bin/gst-inspect-1.0").is_some();
+        let has_gst = resolve_binary_path("gst-inspect-1.0", "/usr/bin/gst-inspect-1.0").is_some();
         if has_gst {
             let output = std::process::Command::new("gst-inspect-1.0")
                 .arg("playbin")
@@ -162,12 +162,8 @@ pub async fn probe_episode_stream(
     ep_id: String,
     channel: String,
 ) -> Result<StreamDetails, String> {
-    let ffprobe_path = if Path::new("/usr/bin/ffprobe").is_file() {
-        Some("/usr/bin/ffprobe")
-    } else {
-        None
-    };
-    probe_stream_core(&client, &drama_id, &ep_id, &channel, ffprobe_path).await
+    let ffprobe_bin = resolve_binary_path("ffprobe", "/usr/bin/ffprobe");
+    probe_stream_core(&client, &drama_id, &ep_id, &channel, ffprobe_bin.as_deref()).await
 }
 
 #[tauri::command]

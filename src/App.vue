@@ -190,6 +190,8 @@ const handleCancel = (ep: number) => {
           :drama-id="metadata.drama_id"
           :metadata="metadata"
           :selected-channel="selectedChannel"
+          :channel-probe-map="channelProbeMap"
+          @probe-complete="({ channel, details }) => { channelProbeMap[channel] = details; }"
         />
 
         <!-- Primary Action -->
