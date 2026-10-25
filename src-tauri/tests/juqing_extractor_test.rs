@@ -1,5 +1,9 @@
+use bingeget::engine::downloader::{build_download_args, DownloadConfig, DownloadTaskSpec};
+use bingeget::engine::probe::probe_stream_core;
+use bingeget::engine::proxy::build_proxy_url;
 use bingeget::extractors::juqing::JuqingExtractor;
 use bingeget::extractors::SiteExtractor;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[test]
 fn test_juqing_can_handle_urls() {
@@ -79,14 +83,25 @@ fn test_juqing_extract_drama_id_and_normalize_url() {
 fn test_juqing_build_episode_referer() {
     let extractor = JuqingExtractor::new();
 
-    let play_referer = extractor.build_episode_referer("陸劇", "gb27z2th", "1");
-    assert!(
-        play_referer == "https://juqing.app/vod/play/id/gb27z2th-1-1.html"
-            || play_referer == "https://juqing.app/vod/detail/id/gb27z2th.html"
-    );
+    // Channel 1, ep 1
+    let play_referer = extractor.build_episode_referer("1", "gb27z2th", "1");
+    assert_eq!(play_referer, "https://tw.juqing.app/vod/play/id/gb27z2th-1-1.html");
 
-    let detail_referer = extractor.build_episode_referer("", "gb27z2th", "");
-    assert_eq!(detail_referer, "https://juqing.app/vod/detail/id/gb27z2th.html");
+    // Channel 7, ep ep2 -> stripped to 2
+    let play_referer_ch7 = extractor.build_episode_referer("7", "gb27z2th", "ep2");
+    assert_eq!(play_referer_ch7, "https://tw.juqing.app/vod/play/id/gb27z2th-7-2.html");
+
+    // Channel missing -> detail URL fallback
+    let missing_channel = extractor.build_episode_referer("", "gb27z2th", "1");
+    assert_eq!(missing_channel, "https://tw.juqing.app/vod/detail/id/gb27z2th.html");
+
+    // Episode missing -> detail URL fallback
+    let missing_ep = extractor.build_episode_referer("1", "gb27z2th", "");
+    assert_eq!(missing_ep, "https://tw.juqing.app/vod/detail/id/gb27z2th.html");
+
+    // Both missing -> detail URL
+    let both_missing = extractor.build_episode_referer("", "gb27z2th", "");
+    assert_eq!(both_missing, "https://tw.juqing.app/vod/detail/id/gb27z2th.html");
 }
 
 #[test]
@@ -171,4 +186,179 @@ fn test_juqing_parse_metadata_offline_fixture() {
     assert_eq!(metadata.episodes[2].ep_number, 3);
     assert_eq!(metadata.episodes[2].ep_id, "3");
     assert_eq!(metadata.episodes[2].available_channels, vec!["7"]);
+}
+
+#[test]
+fn test_juqing_parse_m3u8_offline_fixture() {
+    let mock_html = r#"
+<!DOCTYPE html>
+<html>
+<head><title>Play Video</title></head>
+<body>
+    <div class="player-wrapper">
+        <video id="my-player" class="video-js" controls preload="auto">
+            <source src="https://example.com/stream.m3u8" type="application/x-mpegURL">
+        </video>
+    </div>
+</body>
+</html>
+"#;
+
+    let stream_url = JuqingExtractor::parse_m3u8_from_html(mock_html, None)
+        .expect("Should extract m3u8 url from single source tag");
+    assert_eq!(stream_url, "https://example.com/stream.m3u8");
+}
+
+#[test]
+fn test_juqing_parse_m3u8_multiple_sources_fallback_and_channel_matching() {
+    let mock_html = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <video id="my-player">
+        <source src="https://example.com/ch7.m3u8" channel="7" type="application/x-mpegURL">
+        <source src="https://example.com/ch9.m3u8" channel="9" type="application/x-mpegURL">
+    </video>
+</body>
+</html>
+"#;
+
+    // Matching channel 9
+    let res9 = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("9"))
+        .expect("Should match channel 9");
+    assert_eq!(res9, "https://example.com/ch9.m3u8");
+
+    // Matching channel 7
+    let res7 = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("7"))
+        .expect("Should match channel 7");
+    assert_eq!(res7, "https://example.com/ch7.m3u8");
+
+    // Fallback when channel does not match: default to first source
+    let fallback = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("99"))
+        .expect("Should fallback to first source for unknown channel");
+    assert_eq!(fallback, "https://example.com/ch7.m3u8");
+}
+
+#[tokio::test]
+async fn test_juqing_fetch_m3u8_for_episode_offline_server() {
+    let mock_html = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <video id="my-player">
+        <source src="https://example.com/juqing-stream.m3u8" type="application/x-mpegURL">
+    </video>
+</body>
+</html>
+"#;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let server_task = tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 1024];
+            let _ = socket.read(&mut buf).await;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+                mock_html.len(),
+                mock_html
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        }
+    });
+
+    let client = reqwest::Client::new();
+    let extractor = JuqingExtractor::new();
+    let mock_url = format!("http://{}", addr);
+
+    let stream = extractor
+        .fetch_m3u8_for_episode(&client, &mock_url, "1", "7")
+        .await
+        .expect("fetch_m3u8_for_episode should succeed with offline server");
+
+    assert_eq!(stream, "https://example.com/juqing-stream.m3u8");
+    let _ = server_task.await;
+}
+
+#[tokio::test]
+async fn test_juqing_downstream_probe_and_proxy_and_download_pipeline() {
+    let client = reqwest::Client::new();
+    let extractor = JuqingExtractor::new();
+
+    // 1. Verify Referer generation for downstream pipelines
+    let referer = extractor.build_episode_referer("7", "gb27z2th", "1");
+    assert_eq!(referer, "https://tw.juqing.app/vod/play/id/gb27z2th-7-1.html");
+
+    // 2. Verify streaming proxy URL construction with Juqing Referer
+    let proxy_url = build_proxy_url(18888, "https://example.com/stream.m3u8", &referer);
+    assert!(proxy_url.contains("http://127.0.0.1:18888/proxy"));
+    assert!(proxy_url.contains("url=https%3A%2F%2Fexample.com%2Fstream.m3u8"));
+    assert!(proxy_url.contains("referer=https%3A%2F%2Ftw.juqing.app%2Fvod%2Fplay%2Fid%2Fgb27z2th-7-1.html"));
+
+    // 3. Verify download args construction for n-m3u8dl-re with Juqing Referer
+    let task_spec = DownloadTaskSpec {
+        m3u8_url: "https://example.com/stream.m3u8".to_string(),
+        custom_title: "慶餘年第二季".to_string(),
+        season: 2,
+        episode: 1,
+        save_dir: "/downloads".to_string(),
+        referer: referer.clone(),
+    };
+    let config = DownloadConfig::default();
+    let args = build_download_args(&task_spec, &config);
+
+    assert!(args.contains(&format!("Referer: {}", referer)));
+    assert!(args.contains(&"--header".to_string()));
+
+    // 4. Verify probe_stream_core with offline mock server for Juqing
+    let mock_m3u8 = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1920x1080\nchunklist.m3u8\n";
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let server_task = tokio::spawn(async move {
+        // Handle play page request
+        if let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 1024];
+            let _ = socket.read(&mut buf).await;
+            let play_html = format!(
+                r#"<video id="my-player"><source src="http://{}/stream.m3u8" type="application/x-mpegURL"></video>"#,
+                addr
+            );
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+                play_html.len(),
+                play_html
+            );
+            let _ = socket.write_all(resp.as_bytes()).await;
+        }
+
+        // Handle m3u8 playlist request
+        if let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 1024];
+            let _ = socket.read(&mut buf).await;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.apple.mpegurl\r\nContent-Length: {}\r\n\r\n{}",
+                mock_m3u8.len(),
+                mock_m3u8
+            );
+            let _ = socket.write_all(resp.as_bytes()).await;
+        }
+    });
+
+    let mock_drama_url = format!("http://{}", addr);
+    let probe_details = probe_stream_core(
+        &client,
+        &mock_drama_url,
+        "1",
+        "7",
+        None,
+        Some("juqing"),
+    )
+    .await
+    .expect("Should probe Juqing stream successfully");
+
+    assert_eq!(probe_details.resolution, "1920x1080 (1080p)");
+    assert_eq!(probe_details.bitrate, "2,500 kbps");
+    let _ = server_task.await;
 }

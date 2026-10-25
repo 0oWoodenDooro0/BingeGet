@@ -167,7 +167,12 @@ pub async fn run_download_queue(
         let binary_path = binary_path.clone();
         let category_slug = category_slug.clone();
         let source_id = source_id.clone();
-        let referer = extractor.build_episode_referer(&category_slug, &drama_id, &format!("ep{}", ep));
+        let referer_param = if source_id == "juqing" {
+            &channel_id
+        } else {
+            &category_slug
+        };
+        let referer = extractor.build_episode_referer(referer_param, &drama_id, &format!("ep{}", ep));
 
         tokio::spawn(async move {
             let _permit = match sem.acquire().await {

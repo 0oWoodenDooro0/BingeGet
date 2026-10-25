@@ -71,6 +71,33 @@ static OG_TITLE_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("Invalid og:title regex")
 });
 
+static MY_PLAYER_VIDEO_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?is)<video\b[^>]*?\bid=["']my-player["'][^>]*>(.*?)</video>"#)
+        .expect("Invalid video tag regex")
+});
+
+static MY_PLAYER_TAG_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?is)<video\b[^>]*?\bid=["']my-player["'][^>]*>"#)
+        .expect("Invalid video tag start regex")
+});
+
+static SOURCE_TAG_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?is)<source\b([^>]*)>"#).expect("Invalid source tag regex")
+});
+
+static SRC_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)\bsrc=["']([^"']+)["']"#).expect("Invalid src attr regex")
+});
+
+static TYPE_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)\btype=["']([^"']+)["']"#).expect("Invalid type attr regex")
+});
+
+static CHANNEL_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)\b(?:data-channel|channel|data-ch|ch|data-from|from|title)=["']([^"']+)["']"#)
+        .expect("Invalid channel attr regex")
+});
+
 #[derive(Default, Clone)]
 pub struct JuqingExtractor {}
 
@@ -131,12 +158,22 @@ impl JuqingExtractor {
         Ok(format!("{}://{}/vod/detail/id/{}.html", scheme, host, drama_id))
     }
 
-    pub fn build_episode_referer(&self, _category_slug: &str, drama_id: &str, ep_id: &str) -> String {
+    pub fn build_episode_referer(&self, channel: &str, drama_id: &str, ep_id: &str) -> String {
+        let clean_drama = drama_id.trim();
+        let clean_channel = channel.trim();
         let clean_ep = ep_id.trim().trim_start_matches("ep");
-        if clean_ep.is_empty() {
-            format!("https://juqing.app/vod/detail/id/{}.html", drama_id.trim())
+
+        if clean_channel.is_empty() || clean_ep.is_empty() {
+            if clean_drama.is_empty() {
+                "https://tw.juqing.app/".to_string()
+            } else {
+                format!("https://tw.juqing.app/vod/detail/id/{}.html", clean_drama)
+            }
         } else {
-            format!("https://juqing.app/vod/play/id/{}-1-{}.html", drama_id.trim(), clean_ep)
+            format!(
+                "https://tw.juqing.app/vod/play/id/{}-{}-{}.html",
+                clean_drama, clean_channel, clean_ep
+            )
         }
     }
 
@@ -332,6 +369,135 @@ impl JuqingExtractor {
             channels,
         })
     }
+
+    pub fn parse_m3u8_from_html(html: &str, requested_channel: Option<&str>) -> Result<String> {
+        let video_content = if let Some(caps) = MY_PLAYER_VIDEO_RE.captures(html) {
+            caps.get(1).map(|m| m.as_str()).unwrap_or("")
+        } else if let Some(caps) = MY_PLAYER_TAG_RE.captures(html) {
+            let start = caps.get(0).unwrap().end();
+            let rest = &html[start..];
+            if let Some(end) = rest.find("</video>") {
+                &rest[..end]
+            } else {
+                rest
+            }
+        } else if html.contains("my-player") {
+            html
+        } else {
+            return Err(anyhow!("No <video id=\"my-player\"> tag found in Juqing page"));
+        };
+
+        struct SourceEntry {
+            src: String,
+            mime_type: Option<String>,
+            channel: Option<String>,
+            raw_tag: String,
+        }
+
+        let mut sources = Vec::new();
+
+        for cap in SOURCE_TAG_RE.captures_iter(video_content) {
+            let attrs = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            let src = SRC_ATTR_RE
+                .captures(attrs)
+                .and_then(|c| c.get(1))
+                .map(|m| m.as_str().trim().to_string());
+            let mime_type = TYPE_ATTR_RE
+                .captures(attrs)
+                .and_then(|c| c.get(1))
+                .map(|m| m.as_str().trim().to_lowercase());
+            let channel = CHANNEL_ATTR_RE
+                .captures(attrs)
+                .and_then(|c| c.get(1))
+                .map(|m| m.as_str().trim().to_string());
+
+            if let Some(src_val) = src {
+                if !src_val.is_empty() {
+                    sources.push(SourceEntry {
+                        src: src_val,
+                        mime_type,
+                        channel,
+                        raw_tag: attrs.to_string(),
+                    });
+                }
+            }
+        }
+
+        // If no <source> tags, check if <video id="my-player"> has a direct src="..."
+        if sources.is_empty() {
+            if let Some(cap) = MY_PLAYER_TAG_RE.captures(html) {
+                let tag_str = cap.get(0).unwrap().as_str();
+                if let Some(src_cap) = SRC_ATTR_RE.captures(tag_str) {
+                    if let Some(direct_src) = src_cap.get(1) {
+                        let trimmed = direct_src.as_str().trim();
+                        if !trimmed.is_empty() {
+                            return Ok(Self::normalize_stream_url(trimmed));
+                        }
+                    }
+                }
+            }
+            return Err(anyhow!("No <source> tags found inside <video id=\"my-player\">"));
+        }
+
+        // Prefer mpegurl sources
+        let mpegurl_sources: Vec<&SourceEntry> = sources
+            .iter()
+            .filter(|s| {
+                if let Some(ref m) = s.mime_type {
+                    if m.contains("mpegurl") {
+                        return true;
+                    }
+                }
+                s.src.contains(".m3u8")
+            })
+            .collect();
+
+        let pool = if !mpegurl_sources.is_empty() {
+            mpegurl_sources
+        } else {
+            sources.iter().collect()
+        };
+
+        // Try matching requested channel
+        if let Some(req_ch) = requested_channel {
+            let req_ch = req_ch.trim();
+            if !req_ch.is_empty() {
+                // 1. Direct channel attribute match
+                if let Some(found) = pool.iter().find(|s| {
+                    if let Some(ref c) = s.channel {
+                        c == req_ch || c.contains(req_ch)
+                    } else {
+                        false
+                    }
+                }) {
+                    return Ok(Self::normalize_stream_url(&found.src));
+                }
+
+                // 2. Raw tag or src contains channel string
+                if let Some(found) = pool
+                    .iter()
+                    .find(|s| s.raw_tag.contains(req_ch) || s.src.contains(req_ch))
+                {
+                    return Ok(Self::normalize_stream_url(&found.src));
+                }
+            }
+        }
+
+        // Default to first source
+        let chosen = pool.first().ok_or_else(|| anyhow!("No valid stream source found"))?;
+        Ok(Self::normalize_stream_url(&chosen.src))
+    }
+
+    fn normalize_stream_url(raw: &str) -> String {
+        let trimmed = raw.trim();
+        if trimmed.starts_with("//") {
+            format!("https:{}", trimmed)
+        } else if trimmed.starts_with('/') {
+            format!("https://tw.juqing.app{}", trimmed)
+        } else {
+            trimmed.to_string()
+        }
+    }
 }
 
 #[async_trait]
@@ -386,16 +552,38 @@ impl SiteExtractor for JuqingExtractor {
 
     async fn fetch_m3u8_for_episode(
         &self,
-        _client: &reqwest::Client,
+        client: &reqwest::Client,
         drama_id: &str,
         ep_id: &str,
         channel: &str,
     ) -> Result<String> {
-        // Ticket #40 will flesh out live video element parsing
-        Ok(format!(
-            "https://juqing.app/video/{}-{}-{}.m3u8",
-            drama_id, channel, ep_id
-        ))
+        let clean_ep = ep_id.trim().trim_start_matches("ep");
+        let play_url = if drama_id.starts_with("http://") || drama_id.starts_with("https://") {
+            drama_id.to_string()
+        } else {
+            format!(
+                "https://tw.juqing.app/vod/play/id/{}-{}-{}.html",
+                drama_id.trim(),
+                channel.trim(),
+                clean_ep
+            )
+        };
+
+        let referer = self.build_episode_referer(channel, drama_id, ep_id);
+
+        let html = client
+            .get(&play_url)
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            )
+            .header("Referer", &referer)
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        Self::parse_m3u8_from_html(&html, Some(channel))
     }
 
     async fn search(&self, _client: &reqwest::Client, _keyword: &str) -> Result<Vec<SearchResult>> {

@@ -7,6 +7,7 @@ use bingeget::commands::{
 use bingeget::extractors::registry::{global_registry, ExtractorRegistry};
 use bingeget::extractors::SiteExtractor;
 use bingeget::models::{SearchResult, SeriesMetadata};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 struct DummyExtractor {
     id: &'static str,
@@ -165,6 +166,46 @@ async fn test_fetch_episode_m3u8_source_id_dispatch() {
         .await
         .unwrap_err();
     assert!(err.contains("Extractor not found for source: unknown_source"));
+}
+
+#[tokio::test]
+async fn test_fetch_episode_m3u8_core_with_juqing() {
+    let mock_html = r#"
+<!DOCTYPE html>
+<html>
+<body>
+    <video id="my-player">
+        <source src="https://example.com/juqing-core-stream.m3u8" type="application/x-mpegURL">
+    </video>
+</body>
+</html>
+"#;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let server_task = tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            let mut buf = [0u8; 1024];
+            let _ = socket.read(&mut buf).await;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+                mock_html.len(),
+                mock_html
+            );
+            let _ = socket.write_all(response.as_bytes()).await;
+        }
+    });
+
+    let client = reqwest::Client::new();
+    let mock_url = format!("http://{}", addr);
+
+    let stream = fetch_episode_m3u8_core(&client, &mock_url, "1", "7", Some("juqing"))
+        .await
+        .expect("Should resolve Juqing stream via core dispatcher");
+
+    assert_eq!(stream, "https://example.com/juqing-core-stream.m3u8");
+    let _ = server_task.await;
 }
 
 #[tokio::test]
