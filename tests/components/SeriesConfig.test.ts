@@ -32,7 +32,7 @@ describe('SeriesConfig.vue', () => {
       },
     });
 
-    const browseBtn = wrapper.find('[data-testid=\"browse-dir-btn\"]');
+    const browseBtn = wrapper.find('[data-testid="browse-dir-btn"]');
     await browseBtn.trigger('click');
     await flushPromises();
 
@@ -58,7 +58,7 @@ describe('SeriesConfig.vue', () => {
       },
     });
 
-    const browseBtn = wrapper.find('[data-testid=\"browse-dir-btn\"]');
+    const browseBtn = wrapper.find('[data-testid="browse-dir-btn"]');
     await browseBtn.trigger('click');
     await flushPromises();
 
@@ -74,7 +74,7 @@ describe('SeriesConfig.vue', () => {
       },
     });
 
-    const titleInput = wrapper.find('[data-testid=\"series-title-input\"]');
+    const titleInput = wrapper.find('[data-testid="series-title-input"]');
     await titleInput.setValue('慶餘年');
 
     expect(wrapper.emitted('update:config')).toBeTruthy();
@@ -82,7 +82,39 @@ describe('SeriesConfig.vue', () => {
     expect(emitted.customTitle).toBe('慶餘年');
   });
 
-  it('renders series cover artwork when coverUrl is provided', () => {
+  it('emits updated config when season input changes', async () => {
+    const wrapper = mount(SeriesConfig, {
+      props: {
+        config: initialConfig,
+        totalEpisodes: 30,
+      },
+    });
+
+    const seasonInput = wrapper.find('[data-testid="series-season-input"]');
+    await seasonInput.setValue('2');
+
+    expect(wrapper.emitted('update:config')).toBeTruthy();
+    const emitted = wrapper.emitted('update:config')![0][0] as SeriesConfigModel;
+    expect(emitted.season).toBe(2);
+  });
+
+  it('emits updated config when saveDir input changes directly', async () => {
+    const wrapper = mount(SeriesConfig, {
+      props: {
+        config: initialConfig,
+        totalEpisodes: 30,
+      },
+    });
+
+    const saveDirInput = wrapper.find('[data-testid="save-dir-input"]');
+    await saveDirInput.setValue('/custom/path');
+
+    expect(wrapper.emitted('update:config')).toBeTruthy();
+    const emitted = wrapper.emitted('update:config')![0][0] as SeriesConfigModel;
+    expect(emitted.saveDir).toBe('/custom/path');
+  });
+
+  it('does not render cover artwork container even when coverUrl is provided', () => {
     const wrapper = mount(SeriesConfig, {
       props: {
         config: initialConfig,
@@ -91,10 +123,7 @@ describe('SeriesConfig.vue', () => {
       },
     });
 
-    const coverBox = wrapper.find('[data-testid=\"series-header-cover\"]');
-    expect(coverBox.exists()).toBe(true);
-    const img = coverBox.find('img');
-    expect(img.exists()).toBe(true);
-    expect(img.attributes('src')).toBe('https://chinaq.fun/img/202614235.jpg');
+    const coverBox = wrapper.find('[data-testid="series-header-cover"]');
+    expect(coverBox.exists()).toBe(false);
   });
 });
