@@ -151,7 +151,7 @@ describe('useEpisodePreview composable', () => {
     expect(error.value).toContain('GStreamer pipeline initialization failed');
     expect(error.value).toMatch(/外部播放器/i);
   });
-  it("propagates source_id to get_episode_preview_stream and probe_episode_stream", async () => {
+  it("propagates sourceId and source_id to get_episode_preview_stream and probe_episode_stream", async () => {
     const mockInvoke = vi.fn().mockImplementation((cmd: string) => {
       if (cmd === "get_episode_preview_stream") {
         return Promise.resolve({
@@ -182,33 +182,37 @@ describe('useEpisodePreview composable', () => {
     try {
       const { loadPreview, probeStream } = useEpisodePreview();
 
-      // Explicit source_id
+      // Explicit sourceId / source_id
       await loadPreview("drama1", "ep1", 1, "ch1", "juqing");
       expect(mockInvoke).toHaveBeenCalledWith("get_episode_preview_stream", {
         dramaId: "drama1",
         epId: "ep1",
         channel: "ch1",
+        sourceId: "juqing",
         source_id: "juqing",
       });
       expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
         dramaId: "drama1",
         epId: "ep1",
         channel: "ch1",
+        sourceId: "juqing",
         source_id: "juqing",
       });
 
-      // Default source_id when omitted
+      // Default sourceId / source_id when omitted
       await loadPreview("drama1", "ep1", 1, "ch1");
       expect(mockInvoke).toHaveBeenCalledWith("get_episode_preview_stream", {
         dramaId: "drama1",
         epId: "ep1",
         channel: "ch1",
+        sourceId: "chinaq",
         source_id: "chinaq",
       });
       expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
         dramaId: "drama1",
         epId: "ep1",
         channel: "ch1",
+        sourceId: "chinaq",
         source_id: "chinaq",
       });
 
@@ -218,6 +222,7 @@ describe('useEpisodePreview composable', () => {
         dramaId: "drama1",
         epId: "ep1",
         channel: "ch1",
+        sourceId: "juqing",
         source_id: "juqing",
       });
 
@@ -226,6 +231,7 @@ describe('useEpisodePreview composable', () => {
         dramaId: "drama1",
         epId: "ep1",
         channel: "ch1",
+        sourceId: "chinaq",
         source_id: "chinaq",
       });
     } finally {

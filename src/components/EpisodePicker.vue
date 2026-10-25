@@ -191,14 +191,14 @@ const copyStreamUrl = async () => {
   if (currentStreamSource.value && navigator?.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(currentStreamSource.value);
+      copiedStreamUrl.value = true;
+      setTimeout(() => {
+        copiedStreamUrl.value = false;
+      }, 2000);
     } catch {
       // Ignore clipboard errors
     }
   }
-  copiedStreamUrl.value = true;
-  setTimeout(() => {
-    copiedStreamUrl.value = false;
-  }, 2000);
 };
 
 // Bind video ref
@@ -596,8 +596,9 @@ const applyRange = () => {
           <button
             type="button"
             data-testid="btn-copy-stream-url"
+            :disabled="!currentStreamSource"
             @click="copyStreamUrl"
-            class="rounded border border-slate-700 bg-slate-800/80 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-700 flex items-center gap-1 transition-colors"
+            class="rounded border border-slate-700 bg-slate-800/80 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-700 flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             :title="currentStreamSource || '複製串流網址'"
           >
             <CheckCheck v-if="copiedStreamUrl" class="h-3 w-3 text-emerald-400" />

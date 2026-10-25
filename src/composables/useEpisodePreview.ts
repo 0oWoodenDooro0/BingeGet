@@ -209,6 +209,7 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
         dramaId,
         epId,
         channel,
+        sourceId: sourceId || 'chinaq',
         source_id: sourceId || 'chinaq',
       });
     }
@@ -249,12 +250,14 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
             dramaId,
             epId,
             channel,
+            sourceId: sourceId || 'chinaq',
             source_id: sourceId || 'chinaq',
           }),
           invoke<StreamDetails>('probe_episode_stream', {
             dramaId,
             epId,
             channel,
+            sourceId: sourceId || 'chinaq',
             source_id: sourceId || 'chinaq',
           }),
         ]);
