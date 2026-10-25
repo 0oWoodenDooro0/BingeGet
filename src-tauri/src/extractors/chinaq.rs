@@ -130,15 +130,7 @@ impl ChinaQExtractor {
 
         for play in resp.video_plays {
             if seen.insert(play.src_site.clone()) {
-                let name = match play.src_site.as_str() {
-                    "ikzy" => "iKun 資源 (ikzy)".to_string(),
-                    "hnzy" => "紅牛 資源 (hnzy)".to_string(),
-                    "jszy" => "極速 資源 (jszy)".to_string(),
-                    "jyzy" => "金鷹 資源 (jyzy)".to_string(),
-                    "mdzy" => "魔都 資源 (mdzy)".to_string(),
-                    "lzzy" => "量子公司 (lzzy)".to_string(),
-                    other => format!("片源 ({})", other),
-                };
+                let name = play.src_site.clone();
 
                 channels.push(ChannelOption {
                     id: play.src_site,

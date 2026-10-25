@@ -1,15 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import { Radio } from 'lucide-vue-next';
 import type { ChannelOption } from '../types';
-import {
-  sortChannelsByQuality,
-  getChannelQualityBadge,
-  type StreamQualityInfo,
-  type ChannelQualityBadge,
-} from '../utils/channelQuality';
+import type { StreamQualityInfo } from '../utils/channelQuality';
 
-const props = defineProps<{
+defineProps<{
   channels: ChannelOption[];
   selectedChannel: string;
   probeMap?: Record<string, StreamQualityInfo>;
@@ -18,18 +12,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:selectedChannel', val: string): void;
 }>();
-
-const sortedChannels = computed(() => {
-  return sortChannelsByQuality(props.channels, props.probeMap);
-});
-
-const channelBadgesMap = computed(() => {
-  const map = new Map<string, ChannelQualityBadge>();
-  for (const c of props.channels) {
-    map.set(c.id, getChannelQualityBadge(c.id, props.probeMap?.[c.id]));
-  }
-  return map;
-});
 </script>
 
 <template>
@@ -43,50 +25,28 @@ const channelBadgesMap = computed(() => {
         </span>
       </div>
       <span data-testid="channel-summary-counter" class="text-xs text-slate-400">
-        共 {{ sortedChannels.length }} 個可用頻道
+        共 {{ channels.length }} 個可用頻道
       </span>
     </div>
 
-    <!-- Quality Card Grid View -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-      <div
-        v-for="c in sortedChannels"
+    <!-- Channel Buttons Grid -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+      <button
+        type="button"
+        v-for="c in channels"
         :key="c.id"
         data-testid="channel-item"
         :data-channel-id="c.id"
         @click="emit('update:selectedChannel', c.id)"
         :class="[
-          'flex flex-col rounded-lg border p-2.5 text-left transition-all cursor-pointer',
+          'flex items-center justify-center rounded-lg border py-2.5 px-3 text-center text-xs font-medium transition-all cursor-pointer select-none',
           selectedChannel === c.id
-            ? 'border-indigo-500 bg-indigo-600/20 text-white shadow-sm shadow-indigo-500/10'
-            : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+            ? 'border-indigo-500 bg-indigo-600/20 text-white shadow-sm shadow-indigo-500/10 ring-1 ring-indigo-500/50'
+            : 'border-slate-800 bg-slate-800/30 text-slate-400 hover:border-slate-700 hover:text-slate-200 hover:bg-slate-800/60'
         ]"
       >
-        <div class="flex items-center justify-between">
-          <span class="font-medium text-xs truncate">{{ c.name }}</span>
-          <span
-            v-if="channelBadgesMap.get(c.id)?.tier === 'optimal'"
-            class="text-[10px] text-emerald-400 bg-emerald-950/60 px-1 rounded border border-emerald-800/50 shrink-0 ml-1"
-          >
-            高畫質
-          </span>
-        </div>
-        <div class="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400">
-          <span
-            data-testid="channel-quality-badge"
-            class="font-mono text-slate-300"
-          >
-            {{ channelBadgesMap.get(c.id)?.resolution }}
-          </span>
-          <span v-if="channelBadgesMap.get(c.id)?.bitrate">·</span>
-          <span
-            v-if="channelBadgesMap.get(c.id)?.bitrate"
-            class="font-mono text-slate-400"
-          >
-            {{ channelBadgesMap.get(c.id)?.bitrate }}
-          </span>
-        </div>
-      </div>
+        <span class="truncate">{{ c.name }}</span>
+      </button>
     </div>
   </div>
 </template>

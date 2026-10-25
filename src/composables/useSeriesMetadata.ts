@@ -1,7 +1,6 @@
 import { ref } from 'vue';
 import type { SeriesMetadata, SearchResult } from '../types';
 import { isTauri, getErrorMessage } from './useSystemEnvironment';
-import { sortChannelsByQuality } from '../utils/channelQuality';
 
 export function useSeriesMetadata() {
   const metadata = ref<SeriesMetadata | null>(null);
@@ -86,10 +85,10 @@ export function useSeriesMetadata() {
             available_channels: ['ikzy', 'hnzy', 'jszy'],
           })),
           channels: [
-            { id: 'ikzy', name: 'iKun 資源 (ikzy) - 推薦' },
-            { id: 'hnzy', name: '紅牛 資源 (hnzy)' },
-            { id: 'jszy', name: '極速 資源 (jszy)' },
-            { id: 'jyzy', name: '金鷹 資源 (jyzy)' },
+            { id: 'ikzy', name: 'ikzy' },
+            { id: 'hnzy', name: 'hnzy' },
+            { id: 'jszy', name: 'jszy' },
+            { id: 'jyzy', name: 'jyzy' },
           ],
         };
       }
@@ -97,7 +96,6 @@ export function useSeriesMetadata() {
       metadata.value = data;
 
       if (data.channels && data.channels.length > 0) {
-        data.channels = sortChannelsByQuality(data.channels);
         selectedChannel.value = data.channels[0].id;
       } else {
         selectedChannel.value = '';

@@ -132,9 +132,13 @@ fn test_chinaq_extract_channels_from_qplays() {
 
     let channels = extractor.parse_available_channels(sample_qplays_json).unwrap();
     assert_eq!(channels.len(), 3);
+    // Unmapped: channel ID and name are the direct raw site identifiers
     assert_eq!(channels[0].id, "hnzy");
+    assert_eq!(channels[0].name, "hnzy");
     assert_eq!(channels[1].id, "jszy");
+    assert_eq!(channels[1].name, "jszy");
     assert_eq!(channels[2].id, "ikzy");
+    assert_eq!(channels[2].name, "ikzy");
 }
 
 #[test]

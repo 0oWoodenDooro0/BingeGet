@@ -1,5 +1,3 @@
-import type { ChannelOption } from '../types';
-
 export interface ChannelQualityBadge {
   resolution: string;
   bitrate?: string;
@@ -13,39 +11,7 @@ export interface StreamQualityInfo {
   audio_codec?: string;
 }
 
-// Known default baseline quality profiles for common streaming aggregators
-const KNOWN_CHANNEL_BASELINES: Record<string, { rank: number; badge: ChannelQualityBadge }> = {
-  ikzy: {
-    rank: 3200,
-    badge: { resolution: '1080p', bitrate: '3,200 kbps', tier: 'optimal' },
-  },
-  mdzy: {
-    rank: 3120,
-    badge: { resolution: '1080p', bitrate: '3,120 kbps', tier: 'optimal' },
-  },
-  hnzy: {
-    rank: 2850,
-    badge: { resolution: '1080p', bitrate: '2,850 kbps', tier: 'good' },
-  },
-  jyzy: {
-    rank: 2600,
-    badge: { resolution: '1080p', bitrate: '2,600 kbps', tier: 'good' },
-  },
-  lzzy: {
-    rank: 2500,
-    badge: { resolution: '1080p', bitrate: '2,500 kbps', tier: 'good' },
-  },
-  ffzy: {
-    rank: 2400,
-    badge: { resolution: '1080p', bitrate: '2,400 kbps', tier: 'good' },
-  },
-  jszy: {
-    rank: 1750,
-    badge: { resolution: '720p', bitrate: '1,750 kbps', tier: 'medium' },
-  },
-};
-
-function parseResolutionProfile(resStr: string): {
+export function parseResolutionProfile(resStr: string): {
   tier: 'optimal' | 'good' | 'medium';
   label: string;
   score: number;
@@ -64,70 +30,18 @@ function parseResolutionProfile(resStr: string): {
 }
 
 /**
- * Calculates a numerical quality rank score for a channel option.
- * Higher rank represents better resolution and bitrate.
+ * Returns the quality badge details for a dynamically probed stream, or null if unprobed.
  */
-export function getChannelQualityRank(
-  channelId: string,
+export function getStreamQualityBadge(
   customDetails?: StreamQualityInfo
-): number {
-  if (customDetails) {
-    const profile = parseResolutionProfile(customDetails.resolution);
-    let score = profile.score;
-
-    const brMatch = customDetails.bitrate.replace(/,/g, '').match(/(\d+)/);
-    if (brMatch) {
-      score += parseInt(brMatch[1], 10);
-    }
-    return score;
+): ChannelQualityBadge | null {
+  if (!customDetails) {
+    return null;
   }
-
-  const baseline = KNOWN_CHANNEL_BASELINES[channelId];
-  if (baseline) {
-    return baseline.rank;
-  }
-
-  // Fallback rank for unknown channels
-  return 100;
-}
-
-/**
- * Returns the quality badge details for a channel option.
- */
-export function getChannelQualityBadge(
-  channelId: string,
-  customDetails?: StreamQualityInfo
-): ChannelQualityBadge {
-  if (customDetails) {
-    const profile = parseResolutionProfile(customDetails.resolution);
-    return {
-      resolution: profile.label,
-      bitrate: customDetails.bitrate,
-      tier: profile.tier,
-    };
-  }
-
-  const baseline = KNOWN_CHANNEL_BASELINES[channelId];
-  if (baseline) {
-    return baseline.badge;
-  }
-
+  const profile = parseResolutionProfile(customDetails.resolution);
   return {
-    resolution: '標準畫質',
-    tier: 'medium',
+    resolution: profile.label,
+    bitrate: customDetails.bitrate,
+    tier: profile.tier,
   };
-}
-
-/**
- * Sorts channel options descending by stream quality (highest quality first).
- */
-export function sortChannelsByQuality(
-  channels: ChannelOption[],
-  probeMap?: Record<string, StreamQualityInfo>
-): ChannelOption[] {
-  return [...channels].sort((a, b) => {
-    const rankA = getChannelQualityRank(a.id, probeMap?.[a.id]);
-    const rankB = getChannelQualityRank(b.id, probeMap?.[b.id]);
-    return rankB - rankA;
-  });
 }
