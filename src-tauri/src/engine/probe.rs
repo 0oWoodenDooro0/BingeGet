@@ -23,6 +23,11 @@ static RESOLUTION_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"RESOLUTION=(\d+x\d+)"#).expect("Invalid resolution regex")
 });
 
+static BITRATE_HINT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)(?:^|[/_\.-])(\d{3,5})k(?:bps)?(?:[/_\.-]|$)"#)
+        .expect("Invalid bitrate hint regex")
+});
+
 static PROBE_CACHE: LazyLock<RwLock<HashMap<(String, String, String), (Instant, StreamDetails)>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
@@ -55,7 +60,8 @@ fn resolution_with_tier(width: u32, height: u32) -> String {
 
 pub fn parse_m3u8_master_tags(m3u8_content: &str) -> Option<StreamDetails> {
     for cap in STREAM_INF_RE.captures_iter(m3u8_content) {
-        let line = cap.get(0)?.as_str();
+        let stream_match = cap.get(0)?;
+        let line = stream_match.as_str();
 
         let bandwidth = BANDWIDTH_RE
             .captures(line)
@@ -82,8 +88,44 @@ pub fn parse_m3u8_master_tags(m3u8_content: &str) -> Option<StreamDetails> {
             res_str
         };
 
-        let kbps = (bandwidth + 500) / 1000;
-        let formatted_bitrate = format!("{} kbps", format_number_commas(kbps));
+        let mut kbps = (bandwidth + 500) / 1000;
+
+        // If bandwidth yields 0 or seems unrealistically low (< 50 kbps for a video stream),
+        // try to extract a bitrate hint from the subsequent URI line or the stream-inf line.
+        if kbps < 50 {
+            let rest = &m3u8_content[stream_match.end()..];
+            let next_line = rest
+                .lines()
+                .map(|l| l.trim())
+                .find(|l| !l.is_empty() && !l.starts_with('#'))
+                .unwrap_or("");
+
+            if let Some(hint_cap) = BITRATE_HINT_RE
+                .captures(next_line)
+                .or_else(|| BITRATE_HINT_RE.captures(line))
+            {
+                if let Some(val) = hint_cap.get(1).and_then(|m| m.as_str().parse::<u64>().ok()) {
+                    kbps = val;
+                }
+            }
+
+            // If still unrealistically low, provide a reasonable baseline estimate from resolution
+            if kbps < 50 && height > 0 {
+                kbps = match height {
+                    h if h >= 2160 => 6000,
+                    h if h >= 1080 => 2500,
+                    h if h >= 720 => 1200,
+                    h if h >= 480 => 800,
+                    _ => 500,
+                };
+            }
+        }
+
+        let formatted_bitrate = if kbps > 0 {
+            format!("{} kbps", format_number_commas(kbps))
+        } else {
+            "未知".to_string()
+        };
 
         return Some(StreamDetails {
             resolution: formatted_res,
@@ -155,7 +197,7 @@ pub fn parse_ffprobe_json_output(json_str: &str) -> Result<StreamDetails> {
         let parts: Vec<&str> = rate.split('/').collect();
         if parts.len() == 2 {
             let num: f32 = parts[0].parse().ok()?;
-            let den: f32 = parts[1].parse().ok()?;
+            let den: f32 = parts[1].parse().ok()? ;
             if den > 0.0 {
                 return Some((num / den).round() as u32);
             }

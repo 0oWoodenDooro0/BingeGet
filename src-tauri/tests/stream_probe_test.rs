@@ -34,6 +34,36 @@ segment1.ts
 }
 
 #[test]
+fn test_parse_m3u8_master_tags_with_bogus_bandwidth_and_uri_hint() {
+    let sample = r#"#EXTM3U
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=128,RESOLUTION=1280x720
+1000k_720/hls/index.m3u8
+"#;
+
+    let details = parse_m3u8_master_tags(sample)
+        .expect("Should parse master playlist tags");
+
+    assert_eq!(details.resolution, "1280x720 (720p)");
+    // Should NOT be 0 kbps; should resolve to 1,000 kbps from URI hint or fallback
+    assert_ne!(details.bitrate, "0 kbps");
+    assert_eq!(details.bitrate, "1,000 kbps");
+}
+
+#[test]
+fn test_parse_m3u8_master_tags_with_bogus_bandwidth_and_resolution_fallback() {
+    let sample = r#"#EXTM3U
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=128,RESOLUTION=1920x1080
+subplaylist/video.m3u8
+"#;
+
+    let details = parse_m3u8_master_tags(sample)
+        .expect("Should parse master playlist tags");
+
+    assert_eq!(details.resolution, "1920x1080 (1080p)");
+    assert_eq!(details.bitrate, "2,500 kbps");
+}
+
+#[test]
 fn test_parse_ffprobe_json_output() {
     let sample_ffprobe_json = r#"{
         "streams": [
@@ -44,29 +74,28 @@ fn test_parse_ffprobe_json_output() {
                 "width": 1280,
                 "height": 720,
                 "r_frame_rate": "30/1",
-                "bit_rate": "1750000"
+                "bit_rate": "2500000"
             },
             {
                 "index": 1,
                 "codec_name": "aac",
-                "codec_type": "audio",
-                "bit_rate": "128000"
+                "codec_type": "audio"
             }
         ],
         "format": {
-            "duration": "2700.5"
+            "duration": "142.500000"
         }
     }"#;
 
     let details = parse_ffprobe_json_output(sample_ffprobe_json)
-        .expect("Should parse ffprobe json output");
+        .expect("Should parse valid ffprobe json");
 
     assert_eq!(details.resolution, "1280x720 (720p)");
-    assert_eq!(details.bitrate, "1,750 kbps");
-    assert_eq!(details.fps, Some(30));
+    assert_eq!(details.bitrate, "2,500 kbps");
     assert_eq!(details.video_codec, "h264");
     assert_eq!(details.audio_codec, "aac");
-    assert_eq!(details.duration_secs, Some(2700.5));
+    assert_eq!(details.fps, Some(30));
+    assert_eq!(details.duration_secs, Some(142.5));
 }
 
 #[test]
