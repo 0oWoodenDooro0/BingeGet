@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
 import { Download, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-vue-next';
 import HeaderBar from './components/HeaderBar.vue';
 import UrlBar from './components/UrlBar.vue';
@@ -7,17 +7,29 @@ import SeriesConfig from './components/SeriesConfig.vue';
 import ChannelSelector from './components/ChannelSelector.vue';
 import EpisodePicker from './components/EpisodePicker.vue';
 import DownloadQueue from './components/DownloadQueue.vue';
-import type { SeriesMetadata, QueueItem, SeriesConfigModel, SystemEnvironment, SearchResult } from './types';
+import {
+  useSystemEnvironment,
+  useSeriesMetadata,
+  useDownloadQueue,
+  getErrorMessage,
+} from './composables';
+import type { SeriesConfigModel, SearchResult } from './types';
 
 const loading = ref(false);
 const errorMsg = ref('');
 const successMsg = ref('');
-const envInfo = ref<SystemEnvironment | null>(null);
 
-// Series state
-const metadata = ref<SeriesMetadata | null>(null);
-const selectedChannel = ref('');
-const selectedEpisodes = ref<number[]>([]);
+// System environment detection composable
+const { envInfo } = useSystemEnvironment();
+
+// Series metadata & channel/episode selection composable
+const {
+  metadata,
+  selectedChannel,
+  selectedEpisodes,
+  parseUrl,
+  searchSeries,
+} = useSeriesMetadata();
 
 // User inputs model (bundled to avoid data clumps)
 const config = ref<SeriesConfigModel>({
@@ -28,78 +40,13 @@ const config = ref<SeriesConfigModel>({
   maxConcurrent: 2,
 });
 
-// Queue state
-const queue = ref<QueueItem[]>([]);
-
-// Tauri invoke check
-const isTauri = () => {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-};
-
-const getErrorMessage = (err: unknown): string => {
-  if (err instanceof Error) return err.message;
-  if (typeof err === 'string') return err;
-  if (err && typeof err === 'object' && 'message' in err) {
-    return String((err as { message: unknown }).message);
-  }
-  return String(err);
-};
-
-// Check system environment on mount
-onMounted(async () => {
-  if (isTauri()) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const { listen } = await import('@tauri-apps/api/event');
-      
-      envInfo.value = await invoke<SystemEnvironment>('get_system_environment');
-
-      // Listen for download progress updates from Rust backend
-      await listen<{ episode: number; percent: number; speed: string; eta: string }>(
-        'download-progress',
-        (event) => {
-          const item = queue.value.find(q => q.spec.episode === event.payload.episode);
-          if (item) {
-            item.state = {
-              type: 'Progress',
-              data: {
-                percent: event.payload.percent,
-                speed: event.payload.speed,
-                eta: event.payload.eta,
-              },
-            };
-          }
-        }
-      );
-
-      // Listen for download status updates from Rust backend
-      await listen<{ episode: number; status: string; error?: string }>(
-        'download-status',
-        (event) => {
-          const item = queue.value.find(q => q.spec.episode === event.payload.episode);
-          if (item) {
-            if (event.payload.status === 'Completed') {
-              item.state = { type: 'Completed' };
-            } else if (event.payload.status === 'Downloading') {
-              item.state = { type: 'Downloading' };
-            } else if (event.payload.status === 'Failed') {
-              item.state = { type: 'Failed', error: event.payload.error || '下載失敗' };
-            }
-          }
-        }
-      );
-    } catch (err: unknown) {
-      console.warn('Tauri initialization note:', getErrorMessage(err));
-    }
-  } else {
-    // Web fallback info
-    envInfo.value = {
-      nm3u8dl_path: '/usr/bin/n-m3u8dl-re',
-      ffmpeg_path: '/usr/bin/ffmpeg',
-      is_ready: true,
-    };
-  }
-});
+// Download queue state and event coordination composable
+const {
+  queue,
+  startDownload: triggerStartDownload,
+  retryDownload,
+  cancelDownload,
+} = useDownloadQueue();
 
 // Handle URL parse
 const handleParse = async (url: string) => {
@@ -108,41 +55,8 @@ const handleParse = async (url: string) => {
   successMsg.value = '';
 
   try {
-    if (isTauri()) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const data = await invoke<SeriesMetadata>('parse_series_metadata', { url });
-      metadata.value = data;
-    } else {
-      // Direct parse for preview
-      const dramaIdMatch = url.match(/\/(?:tv-[a-zA-Z0-9]+|[a-zA-Z0-9_-]+)\/([a-zA-Z0-9]+)/);
-      const dramaId = dramaIdMatch ? dramaIdMatch[1] : '202614235';
-      
-      metadata.value = {
-        drama_id: dramaId,
-        category_slug: 'tv-cn',
-        episodes: Array.from({ length: 36 }, (_, i) => ({
-          ep_number: i + 1,
-          ep_id: `ep${i + 1}`,
-          available_channels: ['ikzy', 'hnzy', 'jszy'],
-        })),
-        channels: [
-          { id: 'ikzy', name: 'iKun 資源 (ikzy) - 推薦' },
-          { id: 'hnzy', name: '紅牛 資源 (hnzy)' },
-          { id: 'jszy', name: '極速 資源 (jszy)' },
-          { id: 'jyzy', name: '金鷹 資源 (jyzy)' },
-        ],
-      };
-    }
-
-    if (metadata.value && metadata.value.channels.length > 0) {
-      selectedChannel.value = metadata.value.channels[0].id;
-    }
-
-    if (metadata.value) {
-      selectedEpisodes.value = metadata.value.episodes.map(e => e.ep_number);
-    }
-
-    successMsg.value = `解析成功，共 ${metadata.value?.episodes.length || 0} 集。請確認劇名與集數後即可開始下載。`;
+    const data = await parseUrl(url);
+    successMsg.value = `解析成功，共 ${data.episodes.length} 集。請確認劇名與集數後即可開始下載。`;
   } catch (err: unknown) {
     errorMsg.value = `解析失敗: ${getErrorMessage(err)}`;
   } finally {
@@ -172,89 +86,25 @@ const startDownload = async () => {
 
   errorMsg.value = '';
 
-  const categorySlug = metadata.value?.category_slug || 'tv-cn';
-  const newItems: QueueItem[] = selectedEpisodes.value.map((ep, idx) => ({
-    id: idx + 1,
-    spec: {
-      m3u8_url: '',
-      custom_title: config.value.customTitle.trim(),
-      season: config.value.season,
-      episode: ep,
-      save_dir: config.value.saveDir,
-      referer: `https://chinaq.fun/${categorySlug}/${metadata.value?.drama_id}/ep${ep}.html`,
-    },
-    state: { type: 'Queued' },
-  }));
-
-  queue.value = newItems;
-
-  if (isTauri()) {
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('start_download_queue', {
-        req: {
-          drama_id: metadata.value?.drama_id,
-          category_slug: categorySlug,
-          channel_id: selectedChannel.value,
-          episodes: selectedEpisodes.value,
-          custom_title: config.value.customTitle.trim(),
-          season: config.value.season,
-          save_dir: config.value.saveDir,
-          threads: config.value.threads,
-          max_concurrent: config.value.maxConcurrent,
-          binary_path: config.value.binaryPath || null,
-        }
-      });
-    } catch (err: unknown) {
-      errorMsg.value = `下載啟動失敗: ${getErrorMessage(err)}`;
-    }
-  } else {
-    // Simulated queue progress for web preview
-    simulateQueueProgress();
+  try {
+    if (!metadata.value) return;
+    await triggerStartDownload({
+      metadata: metadata.value,
+      selectedEpisodes: selectedEpisodes.value,
+      selectedChannel: selectedChannel.value,
+      config: config.value,
+    });
+  } catch (err: unknown) {
+    errorMsg.value = getErrorMessage(err);
   }
-};
-
-const simulateQueueProgress = () => {
-  let activeIndex = 0;
-  const interval = setInterval(() => {
-    if (activeIndex >= queue.value.length) {
-      clearInterval(interval);
-      return;
-    }
-
-    const current = queue.value[activeIndex];
-    if (current.state.type === 'Queued') {
-      current.state = {
-        type: 'Progress',
-        data: { percent: 20, speed: '18.4 MB/s', eta: '00:01:05' }
-      };
-    } else if (current.state.type === 'Progress') {
-      const nextPct = current.state.data.percent + 40;
-      if (nextPct >= 100) {
-        current.state = { type: 'Muxing' };
-        setTimeout(() => {
-          current.state = { type: 'Completed' };
-          activeIndex++;
-        }, 800);
-      } else {
-        current.state.data.percent = nextPct;
-      }
-    }
-  }, 1000);
 };
 
 const handleRetry = (ep: number) => {
-  const item = queue.value.find(q => q.spec.episode === ep);
-  if (item) {
-    item.state = { type: 'Queued' };
-  }
+  retryDownload(ep);
 };
 
 const handleCancel = (ep: number) => {
-  const item = queue.value.find(q => q.spec.episode === ep);
-  if (item) {
-    item.state = { type: 'Cancelled' };
-  }
+  cancelDownload(ep);
 };
 </script>
 
@@ -301,6 +151,7 @@ const handleCancel = (ep: number) => {
       <!-- URL & Search Input Bar -->
       <UrlBar
         :loading="loading"
+        :on-search="searchSeries"
         @parse="handleParse"
         @select-result="handleSelectResult"
       />

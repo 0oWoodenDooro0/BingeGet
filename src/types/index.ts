@@ -31,6 +31,9 @@ export type QueueTaskStatus =
 
 export interface QueueItem {
   id: number;
-  spec: import('./generated/DownloadTaskSpec').DownloadTaskSpec;
+  spec: Omit<import('./generated/DownloadTaskSpec').DownloadTaskSpec, 'referer'> & {
+    referer?: string | null;
+  };
   state: QueueTaskStatus;
+  progress?: import('./generated/DownloadProgress').DownloadProgress;
 }

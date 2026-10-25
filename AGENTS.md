@@ -22,3 +22,17 @@
 - **Behavioral Tests Only**: Verify public interfaces, state transitions, and event emissions. Strictly avoid asserting static copy or template labels.
 - **Extractor Matrix**: Verify all supported regional slugs (`tv-cn`, `tv-kr`, `tv-tw`, `tv-jp`, `tv-hk`) when testing extractors.
 - **Architecture Boundaries**: Decouple state presentation (e.g. search results) from input controls (e.g. URL bar); route referer and header logic through `SiteExtractor` methods rather than hardcoding.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as GitHub issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout (`GLOSSARY.md` + `docs/adr/`). See `docs/agents/domain.md`.

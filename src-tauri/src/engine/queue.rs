@@ -1,5 +1,16 @@
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
-use crate::engine::downloader::{DownloadProgress, DownloadTaskSpec};
+use tauri::Emitter;
+use tokio::io::{AsyncReadExt, BufReader};
+use tokio::process::Command;
+use tokio::sync::Semaphore;
+
+use crate::commands::fetch_episode_m3u8_core;
+use crate::engine::downloader::{
+    build_download_args, parse_progress_line, DownloadConfig, DownloadProgress, DownloadTaskSpec,
+};
+use crate::extractors::chinaq::ChinaQExtractor;
+use crate::models::{DownloadQueuePayload, EpisodeStatusPayload, ProgressPayload};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum QueueTaskState {
@@ -52,7 +63,14 @@ impl TaskQueue {
     pub fn active_count(&self) -> usize {
         self.tasks
             .iter()
-            .filter(|t| matches!(t.state, QueueTaskState::Downloading | QueueTaskState::Progress(_) | QueueTaskState::Muxing))
+            .filter(|t| {
+                matches!(
+                    t.state,
+                    QueueTaskState::Downloading
+                        | QueueTaskState::Progress(_)
+                        | QueueTaskState::Muxing
+                )
+            })
             .count()
     }
 
@@ -99,3 +117,182 @@ impl TaskQueue {
         &self.tasks
     }
 }
+
+fn emit_progress_if_matched(app: &tauri::AppHandle, line: &str, ep: u32) {
+    if let Some(prog) = parse_progress_line(line) {
+        let _ = app.emit(
+            "download-progress",
+            ProgressPayload {
+                episode: ep,
+                percent: prog.percent,
+                speed: prog.speed,
+                eta: prog.eta,
+            },
+        );
+    }
+}
+
+pub async fn run_download_queue(
+    app: tauri::AppHandle,
+    client: reqwest::Client,
+    req: DownloadQueuePayload,
+) -> Result<(), String> {
+    let max_concurrent = if req.max_concurrent == 0 { 2 } else { req.max_concurrent };
+    let semaphore = Arc::new(Semaphore::new(max_concurrent));
+
+    let drama_id = req.drama_id;
+    let channel_id = req.channel_id;
+    let custom_title = req.custom_title;
+    let season = req.season;
+    let save_dir = req.save_dir;
+    let threads = req.threads;
+    let binary_path = req.binary_path;
+    let category_slug = req.category_slug.unwrap_or_else(|| "tv-cn".to_string());
+
+    let extractor = ChinaQExtractor::new();
+
+    for ep in req.episodes {
+        let app = app.clone();
+        let client = client.clone();
+        let sem = semaphore.clone();
+
+        let drama_id = drama_id.clone();
+        let channel_id = channel_id.clone();
+        let custom_title = custom_title.clone();
+        let save_dir = save_dir.clone();
+        let binary_path = binary_path.clone();
+        let category_slug = category_slug.clone();
+        let referer = extractor.build_episode_referer(&category_slug, &drama_id, &format!("ep{}", ep));
+
+        tokio::spawn(async move {
+            let _permit = match sem.acquire().await {
+                Ok(p) => p,
+                Err(_) => return,
+            };
+
+            let ep_id = format!("ep{}", ep);
+            let _ = app.emit("download-status", EpisodeStatusPayload {
+                episode: ep,
+                status: "Downloading".to_string(),
+                error: None,
+            });
+
+            // 1. Fetch live m3u8 URL for this episode
+            let m3u8_url = match fetch_episode_m3u8_core(&client, &drama_id, &ep_id, &channel_id).await {
+                Ok(url) => url,
+                Err(e) => {
+                    let _ = app.emit("download-status", EpisodeStatusPayload {
+                        episode: ep,
+                        status: "Failed".to_string(),
+                        error: Some(format!("Failed to fetch m3u8: {}", e)),
+                    });
+                    return;
+                }
+            };
+
+            let spec = DownloadTaskSpec {
+                m3u8_url,
+                custom_title,
+                season,
+                episode: ep,
+                save_dir,
+                referer,
+            };
+
+            let config = DownloadConfig {
+                threads,
+                tmp_dir: "/tmp/bingeget_chunks".to_string(),
+                retry_count: 5,
+                binary_path: binary_path.clone(),
+            };
+
+            let args = build_download_args(&spec, &config);
+            let bin = binary_path.unwrap_or_else(|| "n-m3u8dl-re".to_string());
+
+            let mut child = match Command::new(&bin)
+                .args(&args)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    let _ = app.emit("download-status", EpisodeStatusPayload {
+                        episode: ep,
+                        status: "Failed".to_string(),
+                        error: Some(format!("Failed to start {}: {}", bin, e)),
+                    });
+                    return;
+                }
+            };
+
+            // Prevent process deadlock: actively drain stderr in a separate task
+            if let Some(stderr) = child.stderr.take() {
+                tokio::spawn(async move {
+                    let mut reader = BufReader::new(stderr);
+                    let mut buf = [0u8; 1024];
+                    while let Ok(n) = reader.read(&mut buf).await {
+                        if n == 0 {
+                            break;
+                        }
+                    }
+                });
+            }
+
+            // Stream stdout for live progress events (split by \r or \n)
+            if let Some(stdout) = child.stdout.take() {
+                let mut reader = BufReader::new(stdout);
+                let mut buf = [0u8; 1024];
+                let mut line_buf = Vec::new();
+                while let Ok(n) = reader.read(&mut buf).await {
+                    if n == 0 {
+                        break;
+                    }
+                    for &b in &buf[..n] {
+                        if b == b'\r' || b == b'\n' {
+                            if !line_buf.is_empty() {
+                                let line_str = String::from_utf8_lossy(&line_buf);
+                                emit_progress_if_matched(&app, &line_str, ep);
+                                line_buf.clear();
+                            }
+                        } else {
+                            line_buf.push(b);
+                        }
+                    }
+                }
+                if !line_buf.is_empty() {
+                    let line_str = String::from_utf8_lossy(&line_buf);
+                    emit_progress_if_matched(&app, &line_str, ep);
+                }
+            }
+
+            match child.wait().await {
+                Ok(status) if status.success() => {
+                    let _ = app.emit("download-status", EpisodeStatusPayload {
+                        episode: ep,
+                        status: "Completed".to_string(),
+                        error: None,
+                    });
+                }
+                Ok(status) => {
+                    let _ = app.emit("download-status", EpisodeStatusPayload {
+                        episode: ep,
+                        status: "Failed".to_string(),
+                        error: Some(format!("Exited with status: {}", status)),
+                    });
+                }
+                Err(e) => {
+                    let _ = app.emit("download-status", EpisodeStatusPayload {
+                        episode: ep,
+                        status: "Failed".to_string(),
+                        error: Some(format!("Wait failed: {}", e)),
+                    });
+                }
+            }
+        });
+    }
+
+    Ok(())
+}
+
+pub use run_download_queue as start_download_queue_core;
