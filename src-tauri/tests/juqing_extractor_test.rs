@@ -80,6 +80,57 @@ fn test_juqing_extract_drama_id_and_normalize_url() {
 }
 
 #[test]
+fn test_juqing_build_stream_referer() {
+    let extractor = JuqingExtractor::new();
+
+    // Uniform build_stream_referer with channel and optional category_slug
+    let play_referer = extractor.build_stream_referer("gb27z2th", "1", "1", None);
+    assert_eq!(play_referer, "https://tw.juqing.app/vod/play/id/gb27z2th-1-1.html");
+
+    let play_referer_ch7 = extractor.build_stream_referer("gb27z2th", "ep2", "7", Some("tv-cn"));
+    assert_eq!(play_referer_ch7, "https://tw.juqing.app/vod/play/id/gb27z2th-7-2.html");
+
+    // Trait object call verification
+    let trait_extractor: &dyn SiteExtractor = &extractor;
+    let via_trait = trait_extractor.build_stream_referer("gb27z2th", "ep3", "ikzy", Some("tv-kr"));
+    assert_eq!(via_trait, "https://tw.juqing.app/vod/play/id/gb27z2th-ikzy-3.html");
+}
+
+#[test]
+fn test_juqing_regional_category_matrix() {
+    let extractor = JuqingExtractor::new();
+    let regional_slugs = ["tv-cn", "tv-kr", "tv-tw", "tv-jp", "tv-hk"];
+
+    for slug in regional_slugs {
+        // 1. Regional slug to category label mapping and reverse mapping
+        let label = JuqingExtractor::category_label_from_slug(slug);
+        assert!(label.is_some(), "Should map regional slug {} to label", slug);
+        let reverse_slug = JuqingExtractor::slug_from_category(label.unwrap());
+        assert_eq!(reverse_slug, Some(slug), "Reverse category mapping should match for {}", slug);
+
+        // 2. Metadata HTML category parsing with regional slug
+        let mock_html_slug = format!(
+            r#"<!DOCTYPE html><html><head><meta property="og:video:class" content="{}"></head><body></body></html>"#,
+            slug
+        );
+        let parsed_slug = JuqingExtractor::parse_category(&mock_html_slug);
+        assert_eq!(parsed_slug, Some(slug.to_string()));
+
+        // 3. Metadata HTML category parsing with regional Chinese label
+        let mock_html_label = format!(
+            r#"<!DOCTYPE html><html><head><meta property="og:video:class" content="{}"></head><body></body></html>"#,
+            label.unwrap()
+        );
+        let parsed_label = JuqingExtractor::parse_category(&mock_html_label);
+        assert_eq!(parsed_label, Some(label.unwrap().to_string()));
+
+        // 4. Uniform build_stream_referer with regional category slug
+        let referer = extractor.build_stream_referer("drama999", "1", "ikzy", Some(slug));
+        assert_eq!(referer, "https://tw.juqing.app/vod/play/id/drama999-ikzy-1.html");
+    }
+}
+
+#[test]
 fn test_juqing_build_episode_referer() {
     let extractor = JuqingExtractor::new();
 
@@ -233,10 +284,18 @@ fn test_juqing_parse_m3u8_multiple_sources_fallback_and_channel_matching() {
         .expect("Should match channel 7");
     assert_eq!(res7, "https://example.com/ch7.m3u8");
 
-    // Fallback when channel does not match: default to first source
-    let fallback = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("99"))
-        .expect("Should fallback to first source for unknown channel");
-    assert_eq!(fallback, "https://example.com/ch7.m3u8");
+    // Channel Lock Compliance (ADR-0001): unmatched requested channel MUST return an Err
+    let unmatched = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("99"));
+    assert!(unmatched.is_err(), "Unmatched requested channel must return Err instead of silent fallback");
+
+    // Empty or None requested channel can default to the first source
+    let default_empty = JuqingExtractor::parse_m3u8_from_html(mock_html, Some(""))
+        .expect("Empty requested channel should default to first source");
+    assert_eq!(default_empty, "https://example.com/ch7.m3u8");
+
+    let default_none = JuqingExtractor::parse_m3u8_from_html(mock_html, None)
+        .expect("None requested channel should default to first source");
+    assert_eq!(default_none, "https://example.com/ch7.m3u8");
 }
 
 #[tokio::test]
@@ -246,7 +305,7 @@ async fn test_juqing_fetch_m3u8_for_episode_offline_server() {
 <html>
 <body>
     <video id="my-player">
-        <source src="https://example.com/juqing-stream.m3u8" type="application/x-mpegURL">
+        <source src="https://example.com/juqing-stream.m3u8" channel="7" type="application/x-mpegURL">
     </video>
 </body>
 </html>
@@ -322,7 +381,7 @@ async fn test_juqing_downstream_probe_and_proxy_and_download_pipeline() {
             let mut buf = [0u8; 1024];
             let _ = socket.read(&mut buf).await;
             let play_html = format!(
-                r#"<video id="my-player"><source src="http://{}/stream.m3u8" type="application/x-mpegURL"></video>"#,
+                r#"<video id="my-player"><source src="http://{}/stream.m3u8" channel="7" type="application/x-mpegURL"></video>"#,
                 addr
             );
             let resp = format!(

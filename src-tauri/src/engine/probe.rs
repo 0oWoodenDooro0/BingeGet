@@ -297,11 +297,7 @@ pub async fn probe_stream_core(
         .await
         .map_err(|e| format!("Failed to fetch M3U8 URL: {}", e))?;
 
-    let referer = if sid == "juqing" {
-        extractor.build_episode_referer(channel, drama_id, ep_id)
-    } else {
-        extractor.build_episode_referer("", drama_id, ep_id)
-    };
+    let referer = extractor.build_stream_referer(drama_id, ep_id, channel, None);
 
     // 3. Stage 1: Fetch playlist content and inspect Master tags
     let playlist_resp = client

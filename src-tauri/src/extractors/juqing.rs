@@ -204,6 +204,45 @@ impl JuqingExtractor {
         Ok(format!("{}://{}/vod/detail/id/{}.html", scheme, host, drama_id))
     }
 
+    pub fn build_stream_referer(
+        &self,
+        drama_id: &str,
+        ep_id: &str,
+        channel: &str,
+        _category_slug: Option<&str>,
+    ) -> String {
+        self.build_episode_referer(channel, drama_id, ep_id)
+    }
+
+    pub fn category_label_from_slug(slug: &str) -> Option<&'static str> {
+        let clean = slug.trim().trim_start_matches("tv-");
+        match clean {
+            "cn" => Some("陸劇"),
+            "kr" => Some("韓劇"),
+            "tw" => Some("台劇"),
+            "jp" => Some("日劇"),
+            "hk" => Some("港劇"),
+            "th" => Some("泰劇"),
+            "anime" | "acg" => Some("動漫"),
+            "movie" => Some("電影"),
+            _ => None,
+        }
+    }
+
+    pub fn slug_from_category(label: &str) -> Option<&'static str> {
+        match label.trim() {
+            "陸劇" | "國產劇" | "大陸劇" => Some("tv-cn"),
+            "韓劇" => Some("tv-kr"),
+            "台劇" | "臺灣劇" => Some("tv-tw"),
+            "日劇" => Some("tv-jp"),
+            "港劇" | "香港劇" => Some("tv-hk"),
+            "泰劇" => Some("tv-th"),
+            "動漫" => Some("anime"),
+            "電影" => Some("movie"),
+            _ => None,
+        }
+    }
+
     pub fn build_episode_referer(&self, channel: &str, drama_id: &str, ep_id: &str) -> String {
         let clean_drama = drama_id.trim();
         let clean_channel = channel.trim();
@@ -535,6 +574,11 @@ impl JuqingExtractor {
                 {
                     return Ok(Self::normalize_stream_url(&found.src));
                 }
+
+                return Err(anyhow!(
+                    "Requested channel '{}' not found in stream sources",
+                    req_ch
+                ));
             }
         }
 
@@ -711,6 +755,16 @@ impl SiteExtractor for JuqingExtractor {
         self.build_episode_referer(category_slug, drama_id, ep_id)
     }
 
+    fn build_stream_referer(
+        &self,
+        drama_id: &str,
+        ep_id: &str,
+        channel: &str,
+        category_slug: Option<&str>,
+    ) -> String {
+        self.build_stream_referer(drama_id, ep_id, channel, category_slug)
+    }
+
     async fn fetch_series_metadata(&self, client: &reqwest::Client, url: &str) -> Result<SeriesMetadata> {
         let detail_url = self.normalize_detail_url(url)?;
         let drama_id = self.extract_drama_id(&detail_url)?;
@@ -748,7 +802,7 @@ impl SiteExtractor for JuqingExtractor {
             )
         };
 
-        let referer = self.build_episode_referer(channel, drama_id, ep_id);
+        let referer = self.build_stream_referer(drama_id, ep_id, channel, None);
 
         let html = client
             .get(&play_url)

@@ -218,11 +218,7 @@ pub async fn get_episode_preview_stream(
     let extractor = registry
         .get_by_source_id(sid)
         .ok_or_else(|| format!("Extractor not found for source: {}", sid))?;
-    let referer = if sid == "juqing" {
-        extractor.build_episode_referer(&channel, &drama_id, &ep_id)
-    } else {
-        extractor.build_episode_referer("", &drama_id, &ep_id)
-    };
+    let referer = extractor.build_stream_referer(&drama_id, &ep_id, &channel, None);
 
     let proxy_port = crate::engine::proxy::start_streaming_proxy(client.inner().clone())
         .await

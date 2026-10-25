@@ -151,4 +151,86 @@ describe('useEpisodePreview composable', () => {
     expect(error.value).toContain('GStreamer pipeline initialization failed');
     expect(error.value).toMatch(/外部播放器/i);
   });
+  it("propagates source_id to get_episode_preview_stream and probe_episode_stream", async () => {
+    const mockInvoke = vi.fn().mockImplementation((cmd: string) => {
+      if (cmd === "get_episode_preview_stream") {
+        return Promise.resolve({
+          m3u8_url: "https://tw.juqing.app/stream.m3u8",
+          referer: "https://tw.juqing.app/vod/play/id/drama1-ch1-1.html",
+          proxy_url: "http://127.0.0.1:8899/proxy?url=https://tw.juqing.app/stream.m3u8",
+        });
+      }
+      if (cmd === "probe_episode_stream") {
+        return Promise.resolve({
+          resolution: "1920x1080 (1080p)",
+          bitrate: "3,200 kbps",
+          video_codec: "H.264 / AVC",
+          audio_codec: "AAC",
+          fps: 30,
+          duration_secs: 2700,
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    vi.doMock("@tauri-apps/api/core", () => ({
+      invoke: mockInvoke,
+    }));
+    // @ts-expect-error Mock Tauri
+    window.__TAURI_INTERNALS__ = {};
+
+    try {
+      const { loadPreview, probeStream } = useEpisodePreview();
+
+      // Explicit source_id
+      await loadPreview("drama1", "ep1", 1, "ch1", "juqing");
+      expect(mockInvoke).toHaveBeenCalledWith("get_episode_preview_stream", {
+        dramaId: "drama1",
+        epId: "ep1",
+        channel: "ch1",
+        source_id: "juqing",
+      });
+      expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
+        dramaId: "drama1",
+        epId: "ep1",
+        channel: "ch1",
+        source_id: "juqing",
+      });
+
+      // Default source_id when omitted
+      await loadPreview("drama1", "ep1", 1, "ch1");
+      expect(mockInvoke).toHaveBeenCalledWith("get_episode_preview_stream", {
+        dramaId: "drama1",
+        epId: "ep1",
+        channel: "ch1",
+        source_id: "chinaq",
+      });
+      expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
+        dramaId: "drama1",
+        epId: "ep1",
+        channel: "ch1",
+        source_id: "chinaq",
+      });
+
+      // probeStream helper
+      await probeStream("drama1", "ep1", "ch1", "juqing");
+      expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
+        dramaId: "drama1",
+        epId: "ep1",
+        channel: "ch1",
+        source_id: "juqing",
+      });
+
+      await probeStream("drama1", "ep1", "ch1");
+      expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
+        dramaId: "drama1",
+        epId: "ep1",
+        channel: "ch1",
+        source_id: "chinaq",
+      });
+    } finally {
+      // @ts-expect-error cleanup
+      delete window.__TAURI_INTERNALS__;
+    }
+  });
 });

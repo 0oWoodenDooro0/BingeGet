@@ -57,6 +57,17 @@ impl ChinaQExtractor {
         Ok(drama_id)
     }
 
+    pub fn build_stream_referer(
+        &self,
+        drama_id: &str,
+        ep_id: &str,
+        _channel: &str,
+        category_slug: Option<&str>,
+    ) -> String {
+        let cat = category_slug.unwrap_or("tv-cn");
+        self.build_episode_referer(cat, drama_id, ep_id)
+    }
+
     pub fn build_episode_referer(&self, category_slug: &str, drama_id: &str, ep_id: &str) -> String {
         let clean_ep = if ep_id.starts_with("ep") {
             ep_id.to_string()
@@ -230,6 +241,16 @@ impl SiteExtractor for ChinaQExtractor {
 
     fn build_episode_referer(&self, category_slug: &str, drama_id: &str, ep_id: &str) -> String {
         self.build_episode_referer(category_slug, drama_id, ep_id)
+    }
+
+    fn build_stream_referer(
+        &self,
+        drama_id: &str,
+        ep_id: &str,
+        channel: &str,
+        category_slug: Option<&str>,
+    ) -> String {
+        self.build_stream_referer(drama_id, ep_id, channel, category_slug)
     }
 
     async fn fetch_series_metadata(&self, client: &reqwest::Client, url: &str) -> Result<SeriesMetadata> {

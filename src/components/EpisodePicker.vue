@@ -230,7 +230,7 @@ const switchPreview = (epNum: number) => {
   if (!ep) return;
 
   emit('change-preview', epNum);
-  loadPreview(currentDramaId.value, ep.ep_id, epNum, props.selectedChannel);
+  loadPreview(currentDramaId.value, ep.ep_id, epNum, props.selectedChannel, props.metadata?.source_id);
 };
 
 // Reload preview if user switches Channel in ChannelSelector
@@ -240,7 +240,7 @@ watch(
     if (newChannel && newChannel !== oldChannel && activePreviewEp.value) {
       const ep = props.episodes.find(e => e.ep_number === activePreviewEp.value);
       if (ep) {
-        loadPreview(currentDramaId.value, ep.ep_id, activePreviewEp.value, newChannel);
+        loadPreview(currentDramaId.value, ep.ep_id, activePreviewEp.value, newChannel, props.metadata?.source_id);
       }
     }
   }

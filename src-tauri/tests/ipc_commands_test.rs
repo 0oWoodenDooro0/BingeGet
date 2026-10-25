@@ -29,6 +29,9 @@ impl SiteExtractor for DummyExtractor {
     fn build_episode_referer(&self, category_slug: &str, drama_id: &str, ep_id: &str) -> String {
         format!("https://{}/{}/{}/{}", self.domain, category_slug, drama_id, ep_id)
     }
+    fn build_stream_referer(&self, drama_id: &str, ep_id: &str, _channel: &str, category_slug: Option<&str>) -> String {
+        format!("https://{}/{}/{}/{}", self.domain, category_slug.unwrap_or("tv-cn"), drama_id, ep_id)
+    }
     async fn fetch_series_metadata(&self, _client: &reqwest::Client, _url: &str) -> anyhow::Result<SeriesMetadata> {
         Ok(SeriesMetadata {
             drama_id: "dummy123".to_string(),
@@ -69,6 +72,9 @@ impl SiteExtractor for FailingExtractor {
         false
     }
     fn build_episode_referer(&self, _category_slug: &str, _drama_id: &str, _ep_id: &str) -> String {
+        String::new()
+    }
+    fn build_stream_referer(&self, _drama_id: &str, _ep_id: &str, _channel: &str, _category_slug: Option<&str>) -> String {
         String::new()
     }
     async fn fetch_series_metadata(&self, _client: &reqwest::Client, _url: &str) -> anyhow::Result<SeriesMetadata> {
@@ -202,7 +208,7 @@ async fn test_fetch_episode_m3u8_core_with_juqing() {
 <html>
 <body>
     <video id="my-player">
-        <source src="https://example.com/juqing-core-stream.m3u8" type="application/x-mpegURL">
+        <source src="https://example.com/juqing-core-stream.m3u8" channel="7" type="application/x-mpegURL">
     </video>
 </body>
 </html>
