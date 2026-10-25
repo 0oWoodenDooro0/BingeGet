@@ -26,10 +26,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run theme guardrails check
-        run: npm run check:theme
+      - name: Run frontend checks & tests
+        run: npm run test:fe
 
-      - name: TypeScript typecheck & Build
+      - name: Build frontend
         run: npm run build
 
   backend:

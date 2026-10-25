@@ -31,17 +31,27 @@ if (fs.existsSync(cssPath)) {
   errors.push('src/styles/main.css not found');
 }
 
-// 3. Check Vue components for <option> dark styling
+// 3. Check Vue components for <option> dark styling and placeholder conventions
 const componentsDir = path.join(rootDir, 'src/components');
 if (fs.existsSync(componentsDir)) {
   const files = fs.readdirSync(componentsDir).filter(f => f.endsWith('.vue'));
   for (const file of files) {
     const fullPath = path.join(componentsDir, file);
     const content = fs.readFileSync(fullPath, 'utf-8');
+
+    // 3a. <option> styling
     const optionMatches = content.match(/<option[^>]*>/g) || [];
     for (const tag of optionMatches) {
       if (!/class=["'][^"']*(bg-slate-|dark:)[^"']*["']/.test(tag)) {
         errors.push(`${file} contains <option> without explicit dark background class (e.g. bg-slate-900): ${tag}`);
+      }
+    }
+
+    // 3b. Placeholder convention: avoid verbose prefixes like "例如：", "例如:", "e.g."
+    const placeholderMatches = content.match(/placeholder=["'][^"']*["']/g) || [];
+    for (const tag of placeholderMatches) {
+      if (/placeholder=["'](例如[:：]|e\.g\.)/i.test(tag)) {
+        errors.push(`${file} contains verbose placeholder prefix (avoid '例如：' / 'e.g.'): ${tag}`);
       }
     }
   }
@@ -55,19 +65,17 @@ if (errors.length > 0) {
   const isMaster = currentBranch === 'master' || currentBranch === 'master-retro' || process.env.GITHUB_REF === 'refs/heads/master';
 
   if (isMaster && process.env.STRICT_GUARDRAILS !== 'true') {
-    console.warn('⚠️  Theme Guardrail Notice (Pending PR merge on master):');
+    console.warn('⚠️  UI & Theme Guardrail Notice (Pending PR merge on master):');
     for (const err of errors) {
       console.warn(`  - ${err}`);
     }
-    console.warn('\nNative <select> and <option> elements in WebView / WebKit require color-scheme: dark and explicit dark styling to avoid white backgrounds (see Issue #1).');
   } else {
-    console.error('❌ Theme Guardrail Check Failed:');
+    console.error('❌ UI & Theme Guardrail Check Failed:');
     for (const err of errors) {
       console.error(`  - ${err}`);
     }
-    console.error('\nNative <select> and <option> elements in WebView / WebKit require color-scheme: dark and explicit dark styling to avoid white backgrounds (see Issue #1).');
     process.exit(1);
   }
 } else {
-  console.log('✓ Theme guardrails verified: color-scheme: dark and option dark classes are in place.');
+  console.log('✓ UI and theme guardrails verified: color-scheme, option styling, and placeholder conventions.');
 }
