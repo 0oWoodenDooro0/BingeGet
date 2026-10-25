@@ -68,7 +68,7 @@ const {
   seekTo,
   setVolume,
   cleanup,
-} = useEpisodePreview({ autoPlay: true });
+} = useEpisodePreview({ autoPlay: false });
 
 const formatTime = (secs: number) => {
   if (isNaN(secs) || secs <= 0) return '00:00';
@@ -325,7 +325,6 @@ const applyRange = () => {
             class="h-full w-full object-contain"
             playsinline
             muted
-            autoplay
           ></video>
 
           <!-- Loading State Overlay -->
@@ -348,6 +347,7 @@ const applyRange = () => {
             <span>{{ streamError }}</span>
             <button
               type="button"
+              data-testid="btn-retry-preview"
               @click="switchPreview(activePreviewEp)"
               class="mt-1 rounded bg-rose-950/50 border border-rose-800 px-2.5 py-1 text-[11px] text-rose-200 hover:bg-rose-900/50"
             >

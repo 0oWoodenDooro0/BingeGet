@@ -8,6 +8,7 @@ export interface UseEpisodePreviewOptions {
 }
 
 export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
+  const autoPlay = options.autoPlay === true;
   const activePreviewEp = ref<number>(1);
   const streamDetails = ref<StreamDetails | null>(null);
   const previewStreamInfo = ref<PreviewStreamInfo | null>(null);
@@ -57,13 +58,34 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
         volume.value = el.volume;
         isMuted.value = el.muted;
       };
+      el.onerror = () => {
+        const mediaErr = el.error;
+        if (!mediaErr) {
+          error.value = '播放器發生未知錯誤';
+          return;
+        }
+        const code = mediaErr.code;
+        if (code === 1) {
+          error.value = '影片載入已中止';
+        } else if (code === 2) {
+          error.value = '網路連線異常，無法載入影片串流';
+        } else if (code === 3) {
+          error.value = '影片解碼失敗，可能是系統缺少解碼器 (如 Linux GStreamer 插件)';
+        } else if (code === 4) {
+          error.value = '不支援的影片格式或系統缺少相應解碼器 (如 Linux GStreamer 插件)';
+        } else {
+          error.value = `影片播放錯誤: ${mediaErr.message || '未知錯誤'}`;
+        }
+      };
     }
   };
 
   const togglePlay = () => {
     if (!videoElement.value) return;
     if (videoElement.value.paused) {
-      videoElement.value.play().catch(() => {});
+      videoElement.value.play().catch((err) => {
+        error.value = `播放失敗: ${getErrorMessage(err)}`;
+      });
     } else {
       videoElement.value.pause();
     }
@@ -160,13 +182,25 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
           hls.loadSource(streamSource);
           hls.attachMedia(videoElement.value);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            if (options.autoPlay !== false) {
-              videoElement.value?.play().catch(() => {});
+            if (autoPlay) {
+              videoElement.value?.play().catch((err) => {
+                error.value = `播放失敗: ${getErrorMessage(err)}`;
+              });
             }
           });
           hls.on(Hls.Events.ERROR, (_, data) => {
             if (data.fatal) {
-              error.value = `播放錯誤: ${data.details}`;
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  error.value = `串流網路錯誤 (${data.details})，請檢查網路連線`;
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  error.value = `媒體解碼或處理錯誤 (${data.details})，可能是系統缺少解碼器 (如 Linux GStreamer 插件)`;
+                  break;
+                default:
+                  error.value = `串流播放失敗: ${data.details}`;
+                  break;
+              }
             }
           });
           hlsInstance.value = hls;
@@ -175,8 +209,10 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
           videoElement.value.canPlayType('application/vnd.apple.mpegurl')
         ) {
           videoElement.value.src = streamSource;
-          if (options.autoPlay !== false) {
-            videoElement.value.play().catch(() => {});
+          if (autoPlay) {
+            videoElement.value.play().catch((err) => {
+              error.value = `播放失敗: ${getErrorMessage(err)}`;
+            });
           }
         }
       }

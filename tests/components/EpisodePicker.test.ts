@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import EpisodePicker from '../../src/components/EpisodePicker.vue';
 import type { EpisodeInfo, SeriesMetadata } from '../../src/types';
 
 describe('EpisodePicker.vue', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   const sampleEpisodes: EpisodeInfo[] = [
     { ep_number: 1, ep_id: 'ep1', available_channels: ['ikzy', 'hnzy'] },
     { ep_number: 2, ep_id: 'ep2', available_channels: ['ikzy', 'hnzy'] },
@@ -39,6 +43,52 @@ describe('EpisodePicker.vue', () => {
 
     const epItems = wrapper.findAll('[data-testid="episode-item"]');
     expect(epItems.length).toBe(3);
+  });
+
+  it('disables autoplay by default on mount and does not include autoplay attribute on video', async () => {
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: 'ikzy',
+      },
+    });
+
+    const video = wrapper.find('[data-testid="preview-video"]');
+    expect(video.exists()).toBe(true);
+    // Must NOT have autoplay HTML attribute
+    expect(video.attributes('autoplay')).toBeUndefined();
+
+    await new Promise((r) => setTimeout(r, 20));
+    await wrapper.vm.$nextTick();
+
+    // Must NOT automatically invoke play() on mount
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it('triggers play() when the user explicitly clicks the play button', async () => {
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: 'ikzy',
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 20));
+    await wrapper.vm.$nextTick();
+
+    const playPauseBtn = wrapper.find('[data-testid="btn-play-pause"]');
+    expect(playPauseBtn.exists()).toBe(true);
+
+    await playPauseBtn.trigger('click');
+    expect(playSpy).toHaveBeenCalled();
   });
 
   it('decouples preview switching from download selection: clicking item switches preview without mutating selectedEpisodes', async () => {
@@ -124,6 +174,47 @@ describe('EpisodePicker.vue', () => {
 
     const channelIndicator = wrapper.find('[data-testid="channel-indicator"]');
     expect(channelIndicator.attributes('title')).toBe('紅牛 資源 (hnzy)');
+  });
+
+  it('renders error overlay with retry button when playback fails and allows retrying', async () => {
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: 'ikzy',
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+    await wrapper.vm.$nextTick();
+
+    const videoEl = wrapper.find<HTMLVideoElement>('[data-testid="preview-video"]').element;
+
+    // Simulate error event on video
+    Object.defineProperty(videoEl, 'error', {
+      value: {
+        code: 3,
+        message: 'GStreamer decode error',
+      },
+      configurable: true,
+    });
+    if (videoEl.onerror) {
+      videoEl.onerror(new Event('error'));
+    }
+
+    await wrapper.vm.$nextTick();
+
+    const errorOverlay = wrapper.find('[data-testid="preview-error-overlay"]');
+    expect(errorOverlay.exists()).toBe(true);
+    expect(errorOverlay.text()).toMatch(/解碼|GStreamer/i);
+
+    const retryBtn = wrapper.find('[data-testid="btn-retry-preview"]');
+    expect(retryBtn.exists()).toBe(true);
+
+    await retryBtn.trigger('click');
+    const changeEvents = wrapper.emitted('change-preview');
+    expect(changeEvents).toBeTruthy();
   });
 
   it('provides play/pause and mute/unmute buttons, timeline scrubber, and volume slider', async () => {

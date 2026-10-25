@@ -12,7 +12,7 @@ Finally, available playback channels are currently listed in an arbitrary order 
 
 1. **Cover Artwork Presentation**: Extend drama search results and metadata with cover image URLs. Search results feature visual cover thumbnails alongside titles and tags with graceful lazy loading and placeholder fallbacks, enabling instant visual verification.
 2. **Episode Picker with Right-Side Video Preview Dock**: Refactor the episode section of the current UI so that the episode selection checklist sits on the left while a persistent, live video preview player dock sits directly on the right. Clicking any episode instantaneously switches the preview player to stream that episode's video content without requiring popup dialogs.
-3. **Channel Quality-Descending Sorting**: Automatically sort all available channels in descending order of stream quality (from highest resolution and bitrate down to lower formats: e.g., 1080p optimal > 1080p standard > 720p medium). Quality tags and bitrate metrics are displayed on channel options.
+3. **Channel Quality-Descending Sorting**: Automatically sort all available channels in descending order of quality score (from highest resolution and bitrate down to lower formats: e.g., 1080p optimal > 1080p standard > 720p medium). Quality tags and bitrate metrics are displayed on channel options.
 4. **Detailed Stream Metrics Inspection**: Implement a two-stage stream probe engine (M3U8 Master Playlist tag parsing with an `ffprobe` fallback) that extracts video resolution, stream bitrate, video codec, frame rate, and audio track details. The active stream metrics are presented on the preview player's status overlay and channel selectors with in-memory caching to prevent upstream rate-limiting.
 
 ## User Stories
@@ -46,6 +46,7 @@ Finally, available playback channels are currently listed in an arbitrary order 
 - **Preview Video Player Engine**:
   - Integrate `hls.js` within the frontend for native M3U8 stream demuxing and decoding across desktop platforms.
   - Video stream URLs subject to anti-hotlinking are routed through a lightweight Tauri backend streaming proxy endpoint that injects appropriate `Referer` and `User-Agent` headers.
+  - Autoplay is disabled by default to prevent audio/video deadlocks or crashes in Linux WebKitGTK when GStreamer plugins are missing. Playback requires explicit user action.
 - **Channel Sorting Pipeline**:
   - In `ChannelSelector` and channel models, calculate a quality score for each channel based on probed or declared resolution (1080p > 720p > 480p) and bitrate (higher kbps > lower kbps).
   - Sort channels in descending order of quality score, with highest-quality channels positioned at the front.
@@ -93,7 +94,8 @@ Finally, available playback channels are currently listed in an arbitrary order 
 1. **Frontend Unit & Component Tests (`vitest`)**:
    - `SearchResultList.test.ts`: Verify that search items render image tags with `cover_url` and fall back gracefully on broken image events.
    - `ChannelSelector.test.ts`: Verify that channels are sorted in descending order of quality rank and that clicking a channel updates the selected channel state.
-   - `EpisodePicker.test.ts`: Verify that clicking an episode updates the active preview episode state while preserving separate download selection toggles.
+   - `EpisodePicker.test.ts`: Verify that clicking an episode updates the active preview episode state while preserving separate download selection toggles, and verify that default autoplay is disabled.
+   - `useEpisodePreview.test.ts`: Verify that preview player defaults to non-autoplay, handles media decode/source errors gracefully, and surfaces actionable error messages.
    - `useSeriesMetadata.test.ts`: Verify that metadata parsing preserves `cover_url` and provides quality-sorted channel options.
 2. **Backend Unit & Integration Tests (`cargo test`)**:
    - `chinaq_extractor_test.rs`: Verify that `ChinaQExtractor` populates `cover_url` matching `https://chinaq.fun/img/{drama_id}.jpg` across all regional categories (`tv-cn`, `tv-kr`, `tv-tw`, `tv-jp`, `tv-hk`).
@@ -111,3 +113,4 @@ Finally, available playback channels are currently listed in an arbitrary order 
 
 - ChinaQ serves cover images from `https://chinaq.fun/img/{drama_id}.jpg` with public CORS headers (`Access-Control-Allow-Origin: *`), allowing direct browser rendering without backend proxy overhead.
 - The Channel Lock architectural constraint documented in ADR-0001 is maintained: all episodes continue to lock to the user's selected primary channel, while the preview player allows rapid verification before confirming batch downloads.
+- **Linux Tauri WebKitGTK Video Dependencies**: Video playback within WebKitGTK relies on GStreamer plugins (`gst-plugins-base`, `gst-plugins-good`, `gst-plugins-bad`, `gst-libav`). When missing, WebKitWebProcess can fail decoding; BingeGet disables autoplay by default and catches media errors defensively to prevent UI freezes.
