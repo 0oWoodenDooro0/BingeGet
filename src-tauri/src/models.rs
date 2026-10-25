@@ -101,3 +101,14 @@ pub struct DownloadProgress {
     pub speed: String,
     pub eta: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/types/generated/")]
+pub struct StreamDetails {
+    pub resolution: String,
+    pub bitrate: String,
+    pub video_codec: String,
+    pub audio_codec: String,
+    pub fps: Option<u32>,
+    pub has_master_playlist: bool,
+}

@@ -1,12 +1,13 @@
 use std::path::Path;
 use tauri::State;
 
+use crate::engine::probe::probe_stream_core;
 use crate::engine::queue::run_download_queue;
 pub use crate::engine::queue::start_download_queue_core;
 use crate::extractors::chinaq::ChinaQExtractor;
 use crate::extractors::SiteExtractor;
 use crate::models::{
-    DownloadQueuePayload, SearchResult, SeriesMetadata, SystemEnvironment,
+    DownloadQueuePayload, SearchResult, SeriesMetadata, StreamDetails, SystemEnvironment,
 };
 
 pub fn detect_system_environment_core() -> SystemEnvironment {
@@ -134,6 +135,21 @@ pub async fn search_series(
     keyword: String,
 ) -> Result<Vec<SearchResult>, String> {
     search_series_core(&client, &keyword).await
+}
+
+#[tauri::command]
+pub async fn probe_episode_stream(
+    client: State<'_, reqwest::Client>,
+    drama_id: String,
+    ep_id: String,
+    channel: String,
+) -> Result<StreamDetails, String> {
+    let ffprobe_path = if Path::new("/usr/bin/ffprobe").is_file() {
+        Some("/usr/bin/ffprobe")
+    } else {
+        None
+    };
+    probe_stream_core(&client, &drama_id, &ep_id, &channel, ffprobe_path).await
 }
 
 #[tauri::command]
