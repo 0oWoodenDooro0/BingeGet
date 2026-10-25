@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import type { SeriesMetadata, SearchResult } from '../types';
 import { isTauri, getErrorMessage } from './useSystemEnvironment';
+import { sortChannelsByQuality } from '../utils/channelQuality';
 
 export function useSeriesMetadata() {
   const metadata = ref<SeriesMetadata | null>(null);
@@ -96,6 +97,7 @@ export function useSeriesMetadata() {
       metadata.value = data;
 
       if (data.channels && data.channels.length > 0) {
+        data.channels = sortChannelsByQuality(data.channels);
         selectedChannel.value = data.channels[0].id;
       } else {
         selectedChannel.value = '';
