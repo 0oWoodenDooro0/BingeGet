@@ -9,6 +9,8 @@ export type { ProgressPayload } from './generated/ProgressPayload';
 export type { EpisodeStatusPayload } from './generated/EpisodeStatusPayload';
 export type { DownloadTaskSpec } from './generated/DownloadTaskSpec';
 export type { DownloadProgress } from './generated/DownloadProgress';
+export type { StreamDetails } from './generated/StreamDetails';
+export type { PreviewStreamInfo } from './generated/PreviewStreamInfo';
 
 // UI Specific state models
 export interface SeriesConfigModel {

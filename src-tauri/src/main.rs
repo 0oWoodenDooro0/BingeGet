@@ -18,6 +18,7 @@ fn main() {
             fetch_episode_m3u8,
             search_series,
             probe_episode_stream,
+            get_episode_preview_stream,
             start_download_queue,
         ])
         .run(tauri::generate_context!())

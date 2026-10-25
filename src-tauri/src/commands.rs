@@ -7,7 +7,8 @@ pub use crate::engine::queue::start_download_queue_core;
 use crate::extractors::chinaq::ChinaQExtractor;
 use crate::extractors::SiteExtractor;
 use crate::models::{
-    DownloadQueuePayload, SearchResult, SeriesMetadata, StreamDetails, SystemEnvironment,
+    DownloadQueuePayload, PreviewStreamInfo, SearchResult, SeriesMetadata, StreamDetails,
+    SystemEnvironment,
 };
 
 pub fn detect_system_environment_core() -> SystemEnvironment {
@@ -150,6 +151,19 @@ pub async fn probe_episode_stream(
         None
     };
     probe_stream_core(&client, &drama_id, &ep_id, &channel, ffprobe_path).await
+}
+
+#[tauri::command]
+pub async fn get_episode_preview_stream(
+    client: State<'_, reqwest::Client>,
+    drama_id: String,
+    ep_id: String,
+    channel: String,
+) -> Result<PreviewStreamInfo, String> {
+    let m3u8_url = fetch_episode_m3u8_core(&client, &drama_id, &ep_id, &channel).await?;
+    let chinaq = ChinaQExtractor::new();
+    let referer = chinaq.build_episode_referer("", &drama_id, &ep_id);
+    Ok(PreviewStreamInfo { m3u8_url, referer })
 }
 
 #[tauri::command]

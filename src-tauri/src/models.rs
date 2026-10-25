@@ -112,3 +112,10 @@ pub struct StreamDetails {
     pub fps: Option<u32>,
     pub has_master_playlist: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/types/generated/")]
+pub struct PreviewStreamInfo {
+    pub m3u8_url: String,
+    pub referer: String,
+}

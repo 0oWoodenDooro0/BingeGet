@@ -32,13 +32,15 @@ const {
 } = useSeriesMetadata();
 
 // User inputs model (bundled to avoid data clumps)
-const config = ref<SeriesConfigModel>({
-  customTitle: '',
-  season: 1,
-  saveDir: '/home/user/Downloads',
-  threads: 16,
-  maxConcurrent: 2,
-});
+const config = ref<SeriesConfigModel>(
+  {
+    customTitle: '',
+    season: 1,
+    saveDir: '/home/user/Downloads',
+    threads: 16,
+    maxConcurrent: 2,
+  }
+);
 
 // Download queue state and event coordination composable
 const {
@@ -171,6 +173,9 @@ const handleCancel = (ep: number) => {
         <EpisodePicker
           :episodes="metadata.episodes"
           v-model:selectedEpisodes="selectedEpisodes"
+          :drama-id="metadata.drama_id"
+          :metadata="metadata"
+          :selected-channel="selectedChannel"
         />
 
         <!-- Primary Action -->
