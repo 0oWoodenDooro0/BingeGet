@@ -92,7 +92,8 @@ const handleImageError = (url: string) => {
                 {{ item.category }}
               </span>
               <span
-                class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700/50"
+                data-testid="search-result-source"
+                class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700/60 shadow-sm"
               >
                 {{ item.source_name }}
               </span>

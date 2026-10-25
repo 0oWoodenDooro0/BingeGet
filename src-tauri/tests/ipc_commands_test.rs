@@ -2,7 +2,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bingeget::commands::{
     detect_system_environment_core, fetch_episode_m3u8_core, parse_series_metadata_core,
-    search_series_core,
+    search_series_core, search_series_with_registry,
 };
 use bingeget::extractors::registry::{global_registry, ExtractorRegistry};
 use bingeget::extractors::SiteExtractor;
@@ -52,6 +52,33 @@ impl SiteExtractor for DummyExtractor {
             source_name: self.name.to_string(),
             cover_url: None,
         }])
+    }
+}
+
+struct FailingExtractor;
+
+#[async_trait]
+impl SiteExtractor for FailingExtractor {
+    fn id(&self) -> &'static str {
+        "failing"
+    }
+    fn name(&self) -> &'static str {
+        "Failing Source"
+    }
+    fn can_handle(&self, _url: &str) -> bool {
+        false
+    }
+    fn build_episode_referer(&self, _category_slug: &str, _drama_id: &str, _ep_id: &str) -> String {
+        String::new()
+    }
+    async fn fetch_series_metadata(&self, _client: &reqwest::Client, _url: &str) -> anyhow::Result<SeriesMetadata> {
+        Err(anyhow::anyhow!("Metadata failed"))
+    }
+    async fn fetch_m3u8_for_episode(&self, _client: &reqwest::Client, _drama_id: &str, _ep_id: &str, _channel: &str) -> anyhow::Result<String> {
+        Err(anyhow::anyhow!("M3u8 failed"))
+    }
+    async fn search(&self, _client: &reqwest::Client, _keyword: &str) -> anyhow::Result<Vec<SearchResult>> {
+        Err(anyhow::anyhow!("Network timeout simulated"))
     }
 }
 
@@ -216,6 +243,40 @@ async fn test_search_series_validation() {
 
     let err2 = search_series_core(&client, "   ").await.unwrap_err();
     assert!(err2.contains("Keyword cannot be empty"));
+}
+
+#[tokio::test]
+async fn test_search_series_concurrent_aggregation() {
+    let client = reqwest::Client::new();
+    let res = search_series_core(&client, "慶餘年").await;
+    assert!(res.is_ok(), "search_series_core should return Ok");
+    let results = res.unwrap();
+    for item in &results {
+        assert!(!item.title.is_empty());
+        assert!(!item.url.is_empty());
+        assert!(!item.source_id.is_empty());
+        assert!(!item.source_name.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn test_search_series_error_isolation() {
+    let client = reqwest::Client::new();
+    let mut registry = ExtractorRegistry::new();
+
+    registry.register(Arc::new(DummyExtractor {
+        id: "dummy",
+        name: "Dummy Source",
+        domain: "dummy.tv",
+    }));
+    registry.register(Arc::new(FailingExtractor));
+
+    let res = search_series_with_registry(&client, "test", &registry).await;
+    assert!(res.is_ok(), "search_series_with_registry should not fail when an extractor fails");
+    let results = res.unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].title, "Dummy Title");
+    assert_eq!(results[0].source_id, "dummy");
 }
 
 #[test]

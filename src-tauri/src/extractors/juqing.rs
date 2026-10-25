@@ -98,6 +98,52 @@ static CHANNEL_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("Invalid channel attr regex")
 });
 
+static SEARCH_ARTICLE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?is)<article\b[^>]*>(.*?)</article>"#).expect("Invalid search article regex")
+});
+
+static SEARCH_LINK_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)href=["']([^"']*/vod/detail/id/[a-zA-Z0-9_-]+\.html)["']"#)
+        .expect("Invalid search link regex")
+});
+
+static H4_TITLE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?is)<h4[^>]*class=["'][^"']*\btitle\b[^"']*["'][^>]*>(.*?)</h4>"#)
+        .expect("Invalid h4 title regex")
+});
+
+static META_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)<meta\s+[^>]*?(?:itemprop=["']name["']|name=["']name["'])[^>]*?content=["']([^"']+)["']"#)
+        .expect("Invalid meta name regex")
+});
+
+static COVER_TITLE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)<a\s+[^>]*?class=["'][^"']*\bcover-img\b[^"']*["'][^>]*?title=["']([^"']+)["']"#)
+        .expect("Invalid cover title regex")
+});
+
+static META_YEAR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)<meta\s+[^>]*?(?:itemprop=["']dateCreated["']|itemprop=["']copyrightYear["'])[^>]*?content=["'](\d{4})["']"#)
+        .expect("Invalid meta year regex")
+});
+
+static META_DATE_PUB_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)<meta\s+[^>]*?itemprop=["']datePublished["'][^>]*?content=["'](\d{4})"#)
+        .expect("Invalid meta date published regex")
+});
+
+static ARTICLE_IMG_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?is)<img\b([^>]*)/?>"#).expect("Invalid article img regex")
+});
+
+static DATA_SRC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)\bdata-src=[\"']([^\"']+)[\"']"#).expect("Invalid data-src regex")
+});
+
+static SRC_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)\bsrc=[\"']([^\"']+)[\"']"#).expect("Invalid src regex")
+});
+
 #[derive(Default, Clone)]
 pub struct JuqingExtractor {}
 
@@ -177,46 +223,21 @@ impl JuqingExtractor {
         }
     }
 
-    pub fn parse_cover_url(html: &str) -> Option<String> {
-        let raw_cover = if let Some(caps) = OG_IMAGE_RE1.captures(html) {
-            caps.get(1).map(|m| m.as_str())
-        } else if let Some(caps) = OG_IMAGE_RE2.captures(html) {
-            caps.get(1).map(|m| m.as_str())
-        } else if let Some(caps) = COVER_IMG_RE.captures(html) {
-            caps.get(1).map(|m| m.as_str())
-        } else {
-            None
-        };
-
-        raw_cover.map(|c| {
-            let trimmed = c.trim();
-            if trimmed.starts_with("//") {
-                format!("https:{}", trimmed)
-            } else if trimmed.starts_with('/') {
-                format!("https://juqing.app{}", trimmed)
-            } else {
-                trimmed.to_string()
-            }
-        })
-    }
-
     pub fn parse_title(html: &str) -> Option<String> {
         if let Some(caps) = H1_TITLE_RE.captures(html) {
-            if let Some(t) = caps.get(1) {
-                let text = HTML_TAG_RE.replace_all(t.as_str(), "").trim().to_string();
-                if !text.is_empty() {
-                    return Some(text);
+            if let Some(m) = caps.get(1) {
+                let clean = HTML_TAG_RE.replace_all(m.as_str(), "").trim().to_string();
+                if !clean.is_empty() {
+                    return Some(clean);
                 }
             }
         }
 
         if let Some(caps) = OG_TITLE_RE.captures(html) {
-            if let Some(t) = caps.get(1) {
-                let mut title = t.as_str().trim();
-                if let Some((first, _)) = title.split_once("線上看") {
-                    title = first.trim();
-                }
-                title = title.trim_end_matches("- 小鴨影視").trim();
+            if let Some(m) = caps.get(1) {
+                let clean = m.as_str().trim();
+                let title = clean.split_once("線上看").map(|(t, _)| t.trim()).unwrap_or(clean);
+                let title = title.trim_end_matches("- 小鴨影視").trim();
                 if !title.is_empty() {
                     return Some(title.to_string());
                 }
@@ -226,31 +247,65 @@ impl JuqingExtractor {
         None
     }
 
+    pub fn parse_cover_url(html: &str) -> Option<String> {
+        if let Some(caps) = OG_IMAGE_RE1.captures(html) {
+            if let Some(m) = caps.get(1) {
+                let url = m.as_str().trim();
+                if !url.is_empty() {
+                    return Some(url.to_string());
+                }
+            }
+        }
+
+        if let Some(caps) = OG_IMAGE_RE2.captures(html) {
+            if let Some(m) = caps.get(1) {
+                let url = m.as_str().trim();
+                if !url.is_empty() {
+                    return Some(url.to_string());
+                }
+            }
+        }
+
+        if let Some(caps) = COVER_IMG_RE.captures(html) {
+            if let Some(m) = caps.get(1) {
+                let url = m.as_str().trim();
+                if !url.is_empty() && !url.contains("loading.") {
+                    return Some(url.to_string());
+                }
+            }
+        }
+
+        None
+    }
+
     pub fn parse_category(html: &str) -> Option<String> {
         if let Some(caps) = OG_CATEGORY_RE1.captures(html) {
-            if let Some(c) = caps.get(1) {
-                let trimmed = c.as_str().trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
+            if let Some(m) = caps.get(1) {
+                let cat = m.as_str().trim();
+                if !cat.is_empty() {
+                    return Some(cat.to_string());
                 }
             }
         }
+
         if let Some(caps) = OG_CATEGORY_RE2.captures(html) {
-            if let Some(c) = caps.get(1) {
-                let trimmed = c.as_str().trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
+            if let Some(m) = caps.get(1) {
+                let cat = m.as_str().trim();
+                if !cat.is_empty() {
+                    return Some(cat.to_string());
                 }
             }
         }
+
         if let Some(caps) = GENRE_CATEGORY_RE.captures(html) {
-            if let Some(c) = caps.get(1) {
-                let trimmed = c.as_str().trim();
-                if !trimmed.is_empty() {
-                    return Some(trimmed.to_string());
+            if let Some(m) = caps.get(1) {
+                let cat = m.as_str().trim();
+                if !cat.is_empty() {
+                    return Some(cat.to_string());
                 }
             }
         }
+
         None
     }
 
@@ -498,6 +553,130 @@ impl JuqingExtractor {
             trimmed.to_string()
         }
     }
+
+    pub fn parse_article_title(block: &str) -> Option<String> {
+        let raw_title = if let Some(caps) = H4_TITLE_RE.captures(block) {
+            caps.get(1).map(|m| {
+                HTML_TAG_RE.replace_all(m.as_str(), "").trim().to_string()
+            })
+        } else if let Some(caps) = META_NAME_RE.captures(block) {
+            caps.get(1).map(|m| m.as_str().trim().to_string())
+        } else if let Some(caps) = COVER_TITLE_RE.captures(block) {
+            caps.get(1).map(|m| m.as_str().trim().to_string())
+        } else {
+            None
+        };
+
+        raw_title.and_then(|t| {
+            let mut clean = t.as_str().trim();
+            if let Some((first, _)) = clean.split_once("線上看") {
+                clean = first.trim();
+            }
+            let title = clean.trim_end_matches("- 小鴨影視").trim();
+            if title.is_empty() {
+                None
+            } else {
+                Some(title.to_string())
+            }
+        })
+    }
+
+    pub fn parse_article_year(block: &str) -> Option<String> {
+        if let Some(caps) = META_YEAR_RE.captures(block) {
+            caps.get(1).map(|m| m.as_str().trim().to_string())
+        } else if let Some(caps) = META_DATE_PUB_RE.captures(block) {
+            caps.get(1).map(|m| m.as_str().trim().to_string())
+        } else {
+            None
+        }
+    }
+
+    pub fn parse_article_category(block: &str) -> Option<String> {
+        Self::parse_category(block)
+    }
+
+    pub fn parse_article_cover_url(block: &str) -> Option<String> {
+        for img_cap in ARTICLE_IMG_RE.captures_iter(block) {
+            let attrs = img_cap.get(1).map(|m| m.as_str()).unwrap_or_default();
+            let mut raw_url: Option<&str> = None;
+
+            if let Some(data_src) = DATA_SRC_RE.captures(attrs).and_then(|c| c.get(1)) {
+                let s = data_src.as_str().trim();
+                if !s.is_empty() && !s.contains("loading.") {
+                    raw_url = Some(s);
+                }
+            }
+
+            if raw_url.is_none() {
+                if let Some(src) = SRC_RE.captures(attrs).and_then(|c| c.get(1)) {
+                    let s = src.as_str().trim();
+                    if !s.is_empty() && !s.contains("loading.") {
+                        raw_url = Some(s);
+                    }
+                }
+            }
+
+            if let Some(url_str) = raw_url {
+                let trimmed = url_str.trim();
+                let full = if trimmed.starts_with("//") {
+                    format!("https:{}", trimmed)
+                } else if trimmed.starts_with('/') {
+                    format!("https://tw.juqing.app{}", trimmed)
+                } else {
+                    trimmed.to_string()
+                };
+                return Some(full);
+            }
+        }
+
+        Self::parse_cover_url(block)
+    }
+
+    pub fn parse_search_results(&self, html: &str) -> Result<Vec<SearchResult>> {
+        let mut results = Vec::new();
+
+        for cap in SEARCH_ARTICLE_RE.captures_iter(html) {
+            let article_block = cap.get(1).map(|m| m.as_str()).unwrap_or_default();
+
+            let link_match = SEARCH_LINK_RE.captures(article_block);
+            let raw_url = match link_match {
+                Some(caps) => caps.get(1).map(|m| m.as_str().trim().to_string()),
+                None => continue,
+            };
+            let Some(raw_url) = raw_url else { continue };
+
+            let full_url = if raw_url.starts_with("http://") || raw_url.starts_with("https://") {
+                raw_url
+            } else if raw_url.starts_with("//") {
+                format!("https:{}", raw_url)
+            } else if raw_url.starts_with('/') {
+                format!("https://tw.juqing.app{}", raw_url)
+            } else {
+                format!("https://tw.juqing.app/{}", raw_url)
+            };
+
+            let title = match Self::parse_article_title(article_block) {
+                Some(t) if !t.is_empty() => t,
+                _ => continue,
+            };
+
+            let year = Self::parse_article_year(article_block);
+            let category = Self::parse_article_category(article_block);
+            let cover_url = Self::parse_article_cover_url(article_block);
+
+            results.push(SearchResult {
+                title,
+                year,
+                category,
+                url: full_url,
+                source_id: self.id().to_string(),
+                source_name: self.name().to_string(),
+                cover_url,
+            });
+        }
+
+        Ok(results)
+    }
 }
 
 #[async_trait]
@@ -586,8 +765,28 @@ impl SiteExtractor for JuqingExtractor {
         Self::parse_m3u8_from_html(&html, Some(channel))
     }
 
-    async fn search(&self, _client: &reqwest::Client, _keyword: &str) -> Result<Vec<SearchResult>> {
-        // Ticket #41 will implement full search
-        Ok(Vec::new())
+    async fn search(&self, client: &reqwest::Client, keyword: &str) -> Result<Vec<SearchResult>> {
+        let kw = keyword.trim();
+        if kw.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let search_url = Url::parse_with_params(
+            "https://tw.juqing.app/vod/search/-------------.html",
+            &[("wd", kw)],
+        )?;
+
+        let html = client
+            .get(search_url)
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            )
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        self.parse_search_results(&html)
     }
 }

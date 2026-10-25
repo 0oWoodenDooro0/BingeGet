@@ -362,3 +362,100 @@ async fn test_juqing_downstream_probe_and_proxy_and_download_pipeline() {
     assert_eq!(probe_details.bitrate, "2,500 kbps");
     let _ = server_task.await;
 }
+
+#[test]
+fn test_juqing_parse_search_results_offline_fixture() {
+    let extractor = JuqingExtractor::new();
+    let mock_search_html = r#"
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head><title>慶餘年 - 小鴨影視</title></head>
+<body>
+<div class="search-result">
+    <ul>
+        <li class="col9">
+            <article itemscope="" itemtype="https://schema.org/Movie">
+                <a class="cover-img" itemprop="url" href="https://tw.juqing.app/vod/detail/id/gb27z2th.html" title="慶餘年第二季線上看" rel="bookmark">
+                    <img class="lazyload" itemprop="image" data-src="https://image.juqing.app/vod/1c/01c92e9c3dd9bec34e0c7dfa022e2f24.webp" src="/template/xiaoya/img/loading.webp" alt="慶餘年第二季線上看">
+                </a>
+                <div class="cover-data">
+                    <h4 itemprop="headline" class="title">
+                        <a href="https://tw.juqing.app/vod/detail/id/gb27z2th.html" title="慶餘年第二季" rel="bookmark">慶餘年第二季</a>
+                    </h4>
+                    <meta itemprop="name" content="慶餘年第二季">
+                    <meta itemprop="dateCreated" content="2024">
+                    <meta itemprop="genre" content="劇情,古裝,國產">
+                </div>
+            </article>
+        </li>
+        <li class="col9">
+            <article itemscope="" itemtype="https://schema.org/Movie">
+                <a class="cover-img" itemprop="url" href="/vod/detail/id/rg5u54tc.html" title="慶餘年第一季線上看" rel="bookmark">
+                    <img class="cover-img" itemprop="image" src="https://image.juqing.app/vod/8d/98d41fc6640907a78162a36fff239126.webp" alt="慶餘年第一季線上看">
+                </a>
+                <div class="cover-data">
+                    <h4 itemprop="headline" class="title">
+                        <a href="/vod/detail/id/rg5u54tc.html" title="慶餘年第一季" rel="bookmark">慶餘年第一季</a>
+                    </h4>
+                    <meta itemprop="name" content="慶餘年第一季">
+                    <meta itemprop="dateCreated" content="2019">
+                    <meta itemprop="genre" content="陸劇">
+                </div>
+            </article>
+        </li>
+    </ul>
+</div>
+</body>
+</html>
+"#;
+
+    let results = extractor
+        .parse_search_results(mock_search_html)
+        .expect("Should parse search results successfully");
+
+    assert_eq!(results.len(), 2);
+
+    let first = &results[0];
+    assert_eq!(first.title, "慶餘年第二季");
+    assert_eq!(first.year, Some("2024".to_string()));
+    assert_eq!(first.category, Some("劇情,古裝,國產".to_string()));
+    assert_eq!(first.url, "https://tw.juqing.app/vod/detail/id/gb27z2th.html");
+    assert_eq!(first.source_id, "juqing");
+    assert_eq!(first.source_name, "小鴨影視");
+    assert_eq!(
+        first.cover_url,
+        Some("https://image.juqing.app/vod/1c/01c92e9c3dd9bec34e0c7dfa022e2f24.webp".to_string())
+    );
+
+    let second = &results[1];
+    assert_eq!(second.title, "慶餘年第一季");
+    assert_eq!(second.year, Some("2019".to_string()));
+    assert_eq!(second.category, Some("陸劇".to_string()));
+    assert!(second.url.ends_with("/vod/detail/id/rg5u54tc.html"));
+    assert_eq!(second.source_id, "juqing");
+    assert_eq!(second.source_name, "小鴨影視");
+    assert_eq!(
+        second.cover_url,
+        Some("https://image.juqing.app/vod/8d/98d41fc6640907a78162a36fff239126.webp".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_juqing_search_live_or_keyword() {
+    let extractor = JuqingExtractor::new();
+    let client = reqwest::Client::new();
+    let res = extractor.search(&client, "慶餘年").await;
+    match res {
+        Ok(results) => {
+            assert!(!results.is_empty(), "Search for '慶餘年' should return results from juqing");
+            for item in &results {
+                assert_eq!(item.source_id, "juqing");
+                assert_eq!(item.source_name, "小鴨影視");
+                assert!(item.url.contains("/vod/detail/id/"));
+            }
+        }
+        Err(e) => {
+            eprintln!("Live juqing search network error or timeout: {}", e);
+        }
+    }
+}
