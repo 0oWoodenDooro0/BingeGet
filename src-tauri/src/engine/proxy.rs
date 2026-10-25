@@ -1,5 +1,6 @@
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::LazyLock;
+use std::time::Duration;
 use anyhow::Result;
 use regex::Regex;
 use reqwest::Url;
@@ -14,6 +15,15 @@ static URI_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
 
 pub fn get_proxy_port() -> u16 {
     PROXY_PORT.load(Ordering::SeqCst)
+}
+
+pub fn build_proxy_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(20))
+        .pool_max_idle_per_host(10)
+        .build()
+        .expect("Failed to build proxy HTTP client")
 }
 
 pub fn build_proxy_url(port: u16, target_url: &str, referer: &str) -> String {
@@ -89,7 +99,7 @@ pub fn rewrite_m3u8(content: &str, base_url: &str, referer: &str, port: u16) -> 
     out
 }
 
-async fn handle_connection(mut stream: TcpStream, client: reqwest::Client, port: u16) {
+pub async fn handle_connection(mut stream: TcpStream, client: reqwest::Client, port: u16) {
     let mut buf = [0u8; 4096];
     let n = match stream.read(&mut buf).await {
         Ok(n) if n > 0 => n,
@@ -205,7 +215,12 @@ Content-Length: 0\r\n\
             let bytes = match res.bytes().await {
                 Ok(b) => b,
                 Err(e) => {
-                    let err_body = format!("HTTP/1.1 502 Bad Gateway\r\n\r\n{}", e);
+                    let status = if e.is_timeout() {
+                        "504 Gateway Timeout"
+                    } else {
+                        "502 Bad Gateway"
+                    };
+                    let err_body = format!("HTTP/1.1 {}\r\n\r\n{}", status, e);
                     let _ = stream.write_all(err_body.as_bytes()).await;
                     return;
                 }
@@ -260,7 +275,12 @@ Content-Length: {}\r\n\
             }
         }
         Err(e) => {
-            let err_body = format!("HTTP/1.1 502 Bad Gateway\r\n\r\nFailed to fetch stream: {}", e);
+            let status = if e.is_timeout() {
+                "504 Gateway Timeout"
+            } else {
+                "502 Bad Gateway"
+            };
+            let err_body = format!("HTTP/1.1 {}\r\n\r\nFailed to fetch stream: {}", status, e);
             let _ = stream.write_all(err_body.as_bytes()).await;
         }
     }
@@ -272,6 +292,13 @@ pub async fn start_streaming_proxy(client: reqwest::Client) -> Result<u16> {
         return Ok(current);
     }
 
+    let proxy_client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(20))
+        .pool_max_idle_per_host(10)
+        .build()
+        .unwrap_or(client);
+
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
     PROXY_PORT.store(port, Ordering::SeqCst);
@@ -279,7 +306,7 @@ pub async fn start_streaming_proxy(client: reqwest::Client) -> Result<u16> {
     tokio::spawn(async move {
         loop {
             if let Ok((socket, _)) = listener.accept().await {
-                let c = client.clone();
+                let c = proxy_client.clone();
                 tokio::spawn(async move {
                     handle_connection(socket, c, port).await;
                 });

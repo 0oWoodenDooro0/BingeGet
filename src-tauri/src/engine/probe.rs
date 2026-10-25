@@ -240,14 +240,20 @@ pub fn probe_with_ffprobe(
         .arg("json")
         .arg("-show_streams")
         .arg("-show_format")
+        .arg("-allowed_segment_extensions")
+        .arg("ALL")
+        .arg("-extension_picky")
+        .arg("0")
         .arg("-analyzeduration")
         .arg("3000000")
         .arg("-probesize")
         .arg("3000000");
 
+    let mut headers = "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36\r\n".to_string();
     if let Some(ref_url) = referer {
-        cmd.arg("-headers").arg(format!("Referer: {}\r\n", ref_url));
+        headers.push_str(&format!("Referer: {}\r\n", ref_url));
     }
+    cmd.arg("-headers").arg(headers);
 
     cmd.arg(stream_url);
 

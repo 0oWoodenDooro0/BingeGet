@@ -298,6 +298,58 @@ fn test_juqing_parse_m3u8_multiple_sources_fallback_and_channel_matching() {
     assert_eq!(default_none, "https://example.com/ch7.m3u8");
 }
 
+#[test]
+fn test_juqing_channel_8_matching_with_url_collision_prevention() {
+    // Fixture representing tw.juqing.app play page where Line 1 has '202308' in URL
+    // and label="線路1", while Line 8 has label="線路8".
+    let mock_html = r#"
+<!DOCTYPE html>
+<html>
+<head><title>Juqing Play Page</title></head>
+<body>
+    <div class="player-wrapper">
+        <video id="my-player" class="video-js" controls preload="auto">
+            <source src="https://v2.yuglf.com/202308/22/index.m3u8" label="線路1" type="application/x-mpegURL">
+            <source src="https://v2.qqqrst.com/stream/index.m3u8" label="線路8" type="application/x-mpegURL">
+        </video>
+    </div>
+</body>
+</html>
+"#;
+
+    // 1. Requesting channel "8" must resolve to Line 8, NOT Line 1 (even though Line 1's URL contains '8' in '202308')
+    let stream_8 = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("8"))
+        .expect("Should match Line 8");
+    assert_eq!(
+        stream_8,
+        "https://v2.qqqrst.com/stream/index.m3u8",
+        "Channel 8 must match Line 8 (qqqrst) instead of Line 1 with '202308' URL collision"
+    );
+
+    // 2. Requesting channel "線路8" should also match Line 8
+    let stream_label_8 = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("線路8"))
+        .expect("Should match Line 8 with full label");
+    assert_eq!(stream_label_8, "https://v2.qqqrst.com/stream/index.m3u8");
+
+    // 3. Requesting channel "1" should match Line 1
+    let stream_1 = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("1"))
+        .expect("Should match Line 1");
+    assert_eq!(stream_1, "https://v2.yuglf.com/202308/22/index.m3u8");
+
+    // 4. Channel Lock Compliance (ADR-0001): requesting nonexistent channel (e.g. "2023" or "99") must return Err
+    let unmatched_numeric = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("2023"));
+    assert!(
+        unmatched_numeric.is_err(),
+        "Requesting channel '2023' must NOT match Line 1 just because its URL contains '2023'"
+    );
+
+    let unmatched_99 = JuqingExtractor::parse_m3u8_from_html(mock_html, Some("99"));
+    assert!(
+        unmatched_99.is_err(),
+        "Requesting nonexistent channel 99 must return Err"
+    );
+}
+
 #[tokio::test]
 async fn test_juqing_fetch_m3u8_for_episode_offline_server() {
     let mock_html = r#"

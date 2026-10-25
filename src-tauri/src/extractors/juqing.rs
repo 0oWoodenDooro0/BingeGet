@@ -94,7 +94,7 @@ static TYPE_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static CHANNEL_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:data-channel|channel|data-ch|ch|data-from|from|title)=["']([^"']+)["']"#)
+    Regex::new(r#"(?i)\b(?:data-channel|channel|data-ch|ch|data-from|from|title|label)=["']([^"']+)["']"#)
         .expect("Invalid channel attr regex")
 });
 
@@ -137,11 +137,11 @@ static ARTICLE_IMG_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 static DATA_SRC_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\bdata-src=[\"']([^\"']+)[\"']"#).expect("Invalid data-src regex")
+    Regex::new(r#"(?i)\bdata-src=["']([^"']+)["']"#).expect("Invalid data-src regex")
 });
 
 static SRC_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\bsrc=[\"']([^\"']+)[\"']"#).expect("Invalid src regex")
+    Regex::new(r#"(?i)\bsrc=["']([^"']+)["']"#).expect("Invalid src regex")
 });
 
 #[derive(Default, Clone)]
@@ -485,6 +485,7 @@ impl JuqingExtractor {
             src: String,
             mime_type: Option<String>,
             channel: Option<String>,
+            #[allow(dead_code)]
             raw_tag: String,
         }
 
@@ -556,22 +557,32 @@ impl JuqingExtractor {
         if let Some(req_ch) = requested_channel {
             let req_ch = req_ch.trim();
             if !req_ch.is_empty() {
-                // 1. Direct channel attribute match
+                let target_label = format!("線路{}", req_ch);
+                let req_digits: String = req_ch.chars().filter(|c| c.is_ascii_digit()).collect();
+
                 if let Some(found) = pool.iter().find(|s| {
                     if let Some(ref c) = s.channel {
-                        c == req_ch || c.contains(req_ch)
+                        let c_trimmed = c.trim();
+                        // 1. Direct match (e.g. "8" == "8" or "線路8" == "線路8")
+                        if c_trimmed == req_ch {
+                            return true;
+                        }
+                        // 2. Match with "線路" prefix
+                        if c_trimmed == target_label || c_trimmed.strip_prefix("線路") == Some(req_ch) {
+                            return true;
+                        }
+                        // 3. Match numeric ID (e.g. "線路8" -> "8" == "8")
+                        if !req_digits.is_empty() {
+                            let c_digits: String = c_trimmed.chars().filter(|ch| ch.is_ascii_digit()).collect();
+                            if !c_digits.is_empty() && c_digits == req_digits {
+                                return true;
+                            }
+                        }
+                        false
                     } else {
                         false
                     }
                 }) {
-                    return Ok(Self::normalize_stream_url(&found.src));
-                }
-
-                // 2. Raw tag or src contains channel string
-                if let Some(found) = pool
-                    .iter()
-                    .find(|s| s.raw_tag.contains(req_ch) || s.src.contains(req_ch))
-                {
                     return Ok(Self::normalize_stream_url(&found.src));
                 }
 

@@ -1,5 +1,5 @@
 use bingeget::engine::probe::{parse_ffprobe_json_output, parse_m3u8_master_tags};
-use bingeget::engine::proxy::rewrite_m3u8;
+use bingeget::engine::proxy::{build_proxy_client, rewrite_m3u8};
 
 #[test]
 fn test_parse_m3u8_master_tags_success() {
@@ -99,6 +99,89 @@ fn test_parse_ffprobe_json_output() {
 }
 
 #[test]
+fn test_probe_with_ffprobe_arguments_include_hls_image_segment_bypass_and_headers() {
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = std::env::temp_dir().join(format!("test_ffprobe_{}", std::process::id()));
+    let _ = fs::create_dir_all(&dir);
+    let mock_ffprobe = dir.join("mock_ffprobe.sh");
+    let recorded_args = dir.join("args.txt");
+    let _ = fs::remove_file(&recorded_args);
+
+    let script = format!(
+        r#"#!/bin/sh
+for arg in "$@"; do
+    printf '%s\0' "$arg" >> "{}"
+done
+cat << 'EOF'
+{{
+    "streams": [
+        {{
+            "codec_name": "h264",
+            "codec_type": "video",
+            "width": 1920,
+            "height": 1080,
+            "r_frame_rate": "30/1",
+            "bit_rate": "3000000"
+        }}
+    ]
+}}
+EOF
+exit 0
+"#,
+        recorded_args.display()
+    );
+
+    fs::write(&mock_ffprobe, script).unwrap();
+    #[cfg(unix)]
+    {
+        let mut perms = fs::metadata(&mock_ffprobe).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&mock_ffprobe, perms).unwrap();
+    }
+
+    let stream_url = "https://vod3.wgslsw.com/20240413/cb6LmDpM/index.m3u8";
+    let referer = "https://tw.juqing.app/vod/play/id/oupsenzv-8-1.html";
+
+    let result = bingeget::engine::probe::probe_with_ffprobe(
+        mock_ffprobe.to_str().unwrap(),
+        stream_url,
+        Some(referer),
+    );
+
+    assert!(result.is_ok(), "probe_with_ffprobe should succeed with mock ffprobe");
+
+    let args_bytes = fs::read(&recorded_args).unwrap();
+    let args: Vec<String> = args_bytes
+        .split(|&b| b == 0)
+        .filter(|chunk| !chunk.is_empty())
+        .map(|chunk| String::from_utf8_lossy(chunk).to_string())
+        .collect();
+
+    // Clean up
+    let _ = fs::remove_dir_all(&dir);
+
+    // Verify -allowed_segment_extensions ALL
+    let ext_pos = args.iter().position(|a| a == "-allowed_segment_extensions");
+    assert!(ext_pos.is_some(), "Should pass -allowed_segment_extensions");
+    assert_eq!(args.get(ext_pos.unwrap() + 1).map(|s| s.as_str()), Some("ALL"));
+
+    // Verify -extension_picky 0
+    let picky_pos = args.iter().position(|a| a == "-extension_picky");
+    assert!(picky_pos.is_some(), "Should pass -extension_picky");
+    assert_eq!(args.get(picky_pos.unwrap() + 1).map(|s| s.as_str()), Some("0"));
+
+    // Verify -headers contains User-Agent and Referer
+    let headers_pos = args.iter().position(|a| a == "-headers");
+    assert!(headers_pos.is_some(), "Should pass -headers");
+    let headers_val = args.get(headers_pos.unwrap() + 1).expect("Headers value present");
+    assert!(headers_val.contains("User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"));
+    assert!(headers_val.contains("Referer: https://tw.juqing.app/vod/play/id/oupsenzv-8-1.html"));
+}
+
+#[test]
 fn test_rewrite_m3u8_for_streaming_proxy() {
     let sample_m3u8 = r#"#EXTM3U
 #EXT-X-VERSION:3
@@ -158,5 +241,102 @@ segment1.ts
     assert!(
         rewritten.contains("http://127.0.0.1:37099/proxy?url=https%3A%2F%2Fhd.kuktxu.com%2Fplay%2FeXDM31ve%2Fsegment1.ts"),
         "Segment must be rewritten to proxy URL"
+    );
+}
+
+#[test]
+fn test_proxy_client_builder() {
+    let client = build_proxy_client();
+    // Successfully built reqwest client with timeouts
+    let _ = client;
+}
+
+#[tokio::test]
+async fn test_proxy_timeout_fails_fast_with_504() {
+    use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    // Spawn a mock hanging upstream server
+    let hanging_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let hanging_addr = hanging_listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = hanging_listener.accept().await {
+            let mut buf = [0u8; 1024];
+            let _ = socket.read(&mut buf).await;
+            // Sleep longer than client timeout without sending response
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
+
+    // Create client with short timeout (100ms)
+    let fast_timeout_client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(100))
+        .build()
+        .unwrap();
+
+    // Create a mock stream connection for proxy handle_connection
+    let proxy_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_addr = proxy_listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        if let Ok((socket, _)) = proxy_listener.accept().await {
+            bingeget::engine::proxy::handle_connection(socket, fast_timeout_client, proxy_addr.port()).await;
+        }
+    });
+
+    let mut client_stream = tokio::net::TcpStream::connect(proxy_addr).await.unwrap();
+    let req = format!(
+        "GET /proxy?url=http%3A%2F%2F{}%2Fstream.m3u8 HTTP/1.1\r\nHost: {}\r\n\r\n",
+        hanging_addr, proxy_addr
+    );
+    client_stream.write_all(req.as_bytes()).await.unwrap();
+
+    let mut resp_buf = [0u8; 1024];
+    let n = client_stream.read(&mut resp_buf).await.unwrap();
+    let resp_str = String::from_utf8_lossy(&resp_buf[..n]);
+
+    assert!(
+        resp_str.contains("504 Gateway Timeout"),
+        "Proxy should respond with 504 Gateway Timeout on upstream timeout, got: {}",
+        resp_str
+    );
+}
+
+#[tokio::test]
+async fn test_proxy_unreachable_upstream_fails_fast_with_502() {
+    use std::time::Duration;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let fast_client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_millis(100))
+        .build()
+        .unwrap();
+
+    let proxy_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_addr = proxy_listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        if let Ok((socket, _)) = proxy_listener.accept().await {
+            bingeget::engine::proxy::handle_connection(socket, fast_client, proxy_addr.port()).await;
+        }
+    });
+
+    // Request an unused local port to trigger connection error
+    let mut client_stream = tokio::net::TcpStream::connect(proxy_addr).await.unwrap();
+    let req = format!(
+        "GET /proxy?url=http%3A%2F%2F127.0.0.1%3A59999%2Fstream.m3u8 HTTP/1.1\r\nHost: {}\r\n\r\n",
+        proxy_addr
+    );
+    client_stream.write_all(req.as_bytes()).await.unwrap();
+
+    let mut resp_buf = [0u8; 1024];
+    let n = client_stream.read(&mut resp_buf).await.unwrap();
+    let resp_str = String::from_utf8_lossy(&resp_buf[..n]);
+
+    assert!(
+        resp_str.contains("502 Bad Gateway"),
+        "Proxy should respond with 502 Bad Gateway on connection error, got: {}",
+        resp_str
     );
 }
