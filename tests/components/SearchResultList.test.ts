@@ -92,4 +92,68 @@ describe('SearchResultList.vue', () => {
     expect(wrapper.emitted('select')).toBeTruthy();
     expect(wrapper.emitted('select')![0]).toEqual([sampleResults[0]]);
   });
+
+  it('renders source badges correctly for multiple sources', () => {
+    const mixedResults: SearchResult[] = [
+      {
+        title: '慶餘年第一季',
+        year: '2019',
+        category: '陸劇',
+        url: 'https://chinaq.fun/tv-cn/202614235/',
+        source_id: 'chinaq',
+        source_name: 'ChinaQ',
+        cover_url: null,
+      },
+      {
+        title: '慶餘年第二季',
+        year: '2024',
+        category: '陸劇',
+        url: 'https://tw.juqing.app/vod/detail/id/gb27z2th.html',
+        source_id: 'juqing',
+        source_name: '小鴨影視',
+        cover_url: 'https://image.juqing.app/vod/1c/01c92e9c3dd9bec34e0c7dfa022e2f24.webp',
+      },
+    ];
+
+    const wrapper = mount(SearchResultList, {
+      props: {
+        results: mixedResults,
+        searching: false,
+        searched: true,
+        keyword: '慶餘年',
+      },
+    });
+
+    const sourceBadges = wrapper.findAll('[data-testid="search-result-source"]');
+    expect(sourceBadges.length).toBe(2);
+    expect(sourceBadges[0].text()).toBe(mixedResults[0].source_name);
+    expect(sourceBadges[1].text()).toBe(mixedResults[1].source_name);
+  });
+
+  it('emits select event when juqing search result item is clicked', async () => {
+    const juqingResult: SearchResult = {
+      title: '慶餘年第二季',
+      year: '2024',
+      category: '陸劇',
+      url: 'https://tw.juqing.app/vod/detail/id/gb27z2th.html',
+      source_id: 'juqing',
+      source_name: '小鴨影視',
+      cover_url: 'https://image.juqing.app/vod/1c/01c92e9c3dd9bec34e0c7dfa022e2f24.webp',
+    };
+
+    const wrapper = mount(SearchResultList, {
+      props: {
+        results: [juqingResult],
+        searching: false,
+        searched: true,
+        keyword: '慶餘年',
+      },
+    });
+
+    const items = wrapper.findAll('[data-testid="search-result-item"]');
+    await items[0].trigger('click');
+
+    expect(wrapper.emitted('select')).toBeTruthy();
+    expect(wrapper.emitted('select')![0]).toEqual([juqingResult]);
+  });
 });
