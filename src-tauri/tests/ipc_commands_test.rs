@@ -66,6 +66,14 @@ fn test_extractor_registry_lookup_by_url_and_source_id() {
     assert!(extractor_by_id.is_some(), "Default registry must resolve source_id chinaq");
     assert_eq!(extractor_by_id.unwrap().name(), "ChinaQ");
 
+    let juqing_by_url = registry.get_by_url("https://juqing.app/vod/detail/id/gb27z2th.html");
+    assert!(juqing_by_url.is_some(), "Default registry must resolve juqing url");
+    assert_eq!(juqing_by_url.unwrap().id(), "juqing");
+
+    let juqing_by_id = registry.get_by_source_id("juqing");
+    assert!(juqing_by_id.is_some(), "Default registry must resolve source_id juqing");
+    assert_eq!(juqing_by_id.unwrap().name(), "小鴨影視");
+
     assert!(registry.get_by_source_id("unknown_site").is_none());
     assert!(registry.get_by_url("https://unknown.com/video/1").is_none());
 }
@@ -92,6 +100,7 @@ fn test_custom_extractor_registry_registration() {
     assert_eq!(found_by_id.id(), "dummy");
 
     assert!(registry.get_by_source_id("chinaq").is_none());
+    assert!(registry.get_by_source_id("juqing").is_none());
 }
 
 #[tokio::test]
@@ -102,6 +111,38 @@ async fn test_parse_series_metadata_empty_or_invalid_url() {
 
     let err2 = parse_series_metadata_core(&client, "https://unknown-domain.com/123").await.unwrap_err();
     assert!(err2.contains("Unsupported website URL"));
+}
+
+#[tokio::test]
+async fn test_parse_series_metadata_core_resolves_juqing_url() {
+    let client = reqwest::Client::new();
+    let res = parse_series_metadata_core(&client, "https://juqing.app/vod/detail/id/gb27z2th.html").await;
+    match res {
+        Ok(metadata) => {
+            assert_eq!(metadata.source_id, "juqing");
+            assert_eq!(metadata.drama_id, "gb27z2th");
+            assert!(!metadata.channels.is_empty());
+            assert!(!metadata.episodes.is_empty());
+        }
+        Err(err) => {
+            assert!(!err.contains("Unsupported website URL"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_parse_series_metadata_core_resolves_juqing_play_url() {
+    let client = reqwest::Client::new();
+    let res = parse_series_metadata_core(&client, "https://juqing.app/vod/play/id/gb27z2th-1-1.html").await;
+    match res {
+        Ok(metadata) => {
+            assert_eq!(metadata.source_id, "juqing");
+            assert_eq!(metadata.drama_id, "gb27z2th");
+        }
+        Err(err) => {
+            assert!(!err.contains("Unsupported website URL"));
+        }
+    }
 }
 
 #[tokio::test]

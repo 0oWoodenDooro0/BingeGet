@@ -1,6 +1,7 @@
 use std::sync::{Arc, LazyLock};
 
 use crate::extractors::chinaq::ChinaQExtractor;
+use crate::extractors::juqing::JuqingExtractor;
 use crate::extractors::SiteExtractor;
 
 #[derive(Clone)]
@@ -24,6 +25,7 @@ impl ExtractorRegistry {
     pub fn default_registry() -> Self {
         let mut registry = Self::new();
         registry.register(Arc::new(ChinaQExtractor::new()));
+        registry.register(Arc::new(JuqingExtractor::new()));
         registry
     }
 
