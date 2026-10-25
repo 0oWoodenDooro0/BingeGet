@@ -78,6 +78,7 @@ export function useSeriesMetadata() {
         data = {
           drama_id: dramaId,
           category_slug: 'tv-cn',
+          cover_url: `https://chinaq.fun/img/${dramaId}.jpg`,
           episodes: Array.from({ length: 36 }, (_, i) => ({
             ep_number: i + 1,
             ep_id: `ep${i + 1}`,
@@ -133,6 +134,7 @@ export function useSeriesMetadata() {
           url: 'https://chinaq.fun/tv-kr/202639642/',
           source_id: 'chinaq',
           source_name: 'ChinaQ',
+          cover_url: 'https://chinaq.fun/img/202639642.jpg',
         },
       ];
     }

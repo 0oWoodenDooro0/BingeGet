@@ -202,6 +202,10 @@ impl ChinaQExtractor {
                     format!("https://chinaq.fun/{}", href)
                 };
 
+                let cover_url = self.extract_drama_id(&full_url).ok().map(|id| {
+                    format!("https://chinaq.fun/img/{}.jpg", id)
+                });
+
                 results.push(SearchResult {
                     title,
                     year,
@@ -209,6 +213,7 @@ impl ChinaQExtractor {
                     url: full_url,
                     source_id: self.id().to_string(),
                     source_name: self.name().to_string(),
+                    cover_url,
                 });
             }
         }
@@ -265,10 +270,12 @@ impl SiteExtractor for ChinaQExtractor {
             .await?;
 
         let channels = self.parse_available_channels(&qplays_json)?;
+        let cover_url = Some(format!("https://chinaq.fun/img/{}.jpg", drama_id));
 
         Ok(SeriesMetadata {
             drama_id,
             category_slug: Some(category_slug),
+            cover_url,
             episodes,
             channels,
         })

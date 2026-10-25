@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Calendar, Tag, ChevronRight } from 'lucide-vue-next';
+import { reactive } from 'vue';
+import { Calendar, Tag, ChevronRight, Film } from 'lucide-vue-next';
 import type { SearchResult } from '../types';
 
 defineProps<{
@@ -12,6 +13,12 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'select', result: SearchResult): void;
 }>();
+
+const failedImages = reactive<Record<string, boolean>>({});
+
+const handleImageError = (url: string) => {
+  failedImages[url] = true;
+};
 </script>
 
 <template>
@@ -24,9 +31,14 @@ const emit = defineEmits<{
         class="flex animate-pulse items-center justify-between rounded-lg border border-slate-800 bg-slate-800/30 p-3"
       >
         <div class="flex items-center gap-3">
-          <div class="h-4 w-32 rounded bg-slate-700/60"></div>
-          <div class="h-4 w-12 rounded bg-slate-800"></div>
-          <div class="h-4 w-12 rounded bg-slate-800"></div>
+          <div class="h-14 w-10 rounded bg-slate-700/60 shrink-0"></div>
+          <div class="space-y-1.5">
+            <div class="h-4 w-32 rounded bg-slate-700/60"></div>
+            <div class="flex gap-2">
+              <div class="h-4 w-12 rounded bg-slate-800"></div>
+              <div class="h-4 w-12 rounded bg-slate-800"></div>
+            </div>
+          </div>
         </div>
         <div class="h-4 w-8 rounded bg-slate-800"></div>
       </div>
@@ -39,32 +51,52 @@ const emit = defineEmits<{
         :key="idx"
         data-testid="search-result-item"
         @click="emit('select', item)"
-        class="group flex cursor-pointer items-center justify-between rounded-lg border border-slate-800 bg-slate-800/40 p-3 transition-all hover:border-indigo-500/50 hover:bg-slate-800/80"
+        class="group flex cursor-pointer items-center justify-between rounded-lg border border-slate-800 bg-slate-800/40 p-2.5 transition-all hover:border-indigo-500/50 hover:bg-slate-800/80"
       >
         <div class="flex items-center gap-3">
-          <span class="font-medium text-sm text-slate-100 group-hover:text-indigo-300 transition-colors">
-            {{ item.title }}
-          </span>
-          <div class="flex items-center gap-1.5">
-            <span
-              v-if="item.year"
-              class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium bg-slate-700/60 text-slate-300"
-            >
-              <Calendar class="h-2.5 w-2.5 opacity-70" />
-              {{ item.year }}
+          <!-- Cover Thumbnail or Placeholder -->
+          <div class="relative h-14 w-10 shrink-0 overflow-hidden rounded bg-slate-900 border border-slate-700/60 shadow-sm flex items-center justify-center">
+            <img
+              v-if="item.cover_url && !failedImages[item.url]"
+              :src="item.cover_url"
+              :alt="item.title"
+              loading="lazy"
+              @error="handleImageError(item.url)"
+              class="h-full w-full object-cover"
+              data-testid="search-result-cover"
+            />
+            <Film
+              v-else
+              class="h-5 w-5 text-slate-500 opacity-60"
+              data-testid="search-result-placeholder"
+            />
+          </div>
+
+          <div>
+            <span class="font-medium text-sm text-slate-100 group-hover:text-indigo-300 transition-colors">
+              {{ item.title }}
             </span>
-            <span
-              v-if="item.category"
-              class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium bg-indigo-950/50 text-indigo-300 border border-indigo-800/40"
-            >
-              <Tag class="h-2.5 w-2.5 opacity-70" />
-              {{ item.category }}
-            </span>
-            <span
-              class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700/50"
-            >
-              {{ item.source_name }}
-            </span>
+            <div class="flex items-center gap-1.5 mt-1">
+              <span
+                v-if="item.year"
+                class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium bg-slate-700/60 text-slate-300"
+              >
+                <Calendar class="h-2.5 w-2.5 opacity-70" />
+                {{ item.year }}
+              </span>
+              <span
+                v-if="item.category"
+                class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium bg-indigo-950/50 text-indigo-300 border border-indigo-800/40"
+              >
+                <Tag class="h-2.5 w-2.5 opacity-70" />
+                {{ item.category }}
+              </span>
+              <span
+                class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700/50"
+              >
+                {{ item.source_name }}
+              </span>
+            </div>
           </div>
         </div>
 

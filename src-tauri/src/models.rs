@@ -23,6 +23,8 @@ pub struct SeriesMetadata {
     pub drama_id: String,
     #[serde(default)]
     pub category_slug: Option<String>,
+    #[serde(default)]
+    pub cover_url: Option<String>,
     pub episodes: Vec<EpisodeInfo>,
     pub channels: Vec<ChannelOption>,
 }
@@ -36,6 +38,8 @@ pub struct SearchResult {
     pub url: String,
     pub source_id: String,
     pub source_name: String,
+    #[serde(default)]
+    pub cover_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

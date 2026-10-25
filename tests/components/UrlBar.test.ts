@@ -98,6 +98,7 @@ describe('UrlBar.vue', () => {
         url: 'https://chinaq.fun/tv-cn/202312271/',
         source_id: 'chinaq',
         source_name: 'ChinaQ',
+        cover_url: null,
       },
       {
         title: '繁星點點',
@@ -106,6 +107,7 @@ describe('UrlBar.vue', () => {
         url: 'https://chinaq.fun/tv-tw/202209121/',
         source_id: 'chinaq',
         source_name: 'ChinaQ',
+        cover_url: null,
       },
     ];
 

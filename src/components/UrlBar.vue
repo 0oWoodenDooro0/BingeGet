@@ -60,6 +60,7 @@ const handleSearch = async () => {
           url: 'https://chinaq.fun/tv-kr/202639642/',
           source_id: 'chinaq',
           source_name: 'ChinaQ',
+          cover_url: 'https://chinaq.fun/img/202639642.jpg',
         },
       ];
     }
