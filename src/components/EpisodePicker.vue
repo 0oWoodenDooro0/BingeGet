@@ -3,7 +3,6 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import {
   CheckSquare,
   Square,
-  Check,
   Play,
   Pause,
   Volume2,
@@ -128,6 +127,11 @@ const switchPreview = (epNum: number) => {
   loadPreview(currentDramaId.value, ep.ep_id, epNum, props.selectedChannel);
 };
 
+// Set preview episode trigger handler
+const setPreviewEp = (epNum: number) => {
+  switchPreview(epNum);
+};
+
 // Reload preview if user switches Channel in ChannelSelector
 watch(
   () => props.selectedChannel,
@@ -201,7 +205,7 @@ const applyRange = () => {
 
 <template>
   <div v-if="episodes.length > 0" class="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-4">
-    <!-- Action Bar -->
+    <!-- Action Bar / Batch Selection Toolbar -->
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
       <div class="flex items-center gap-2">
         <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -212,6 +216,7 @@ const applyRange = () => {
       <div class="flex flex-wrap items-center gap-2 text-xs">
         <button
           type="button"
+          data-testid="btn-select-all"
           @click="selectAll"
           class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 flex items-center gap-1 transition-colors"
         >
@@ -219,6 +224,7 @@ const applyRange = () => {
         </button>
         <button
           type="button"
+          data-testid="btn-clear-all"
           @click="clearAll"
           class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 flex items-center gap-1 transition-colors"
         >
@@ -226,26 +232,38 @@ const applyRange = () => {
         </button>
         <button
           type="button"
+          data-testid="btn-select-first-10"
           @click="selectFirstN(10)"
           class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 transition-colors"
         >
           前 10 集
         </button>
+        <button
+          type="button"
+          data-testid="btn-select-first-20"
+          @click="selectFirstN(20)"
+          class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 transition-colors"
+        >
+          前 20 集
+        </button>
         
         <div class="flex items-center gap-1 pl-2 border-l border-slate-800">
           <input
             v-model.number="rangeStart"
+            data-testid="input-range-start"
             type="number"
             class="w-12 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-xs text-slate-200"
           />
           <span class="text-slate-500">-</span>
           <input
             v-model.number="rangeEnd"
+            data-testid="input-range-end"
             type="number"
             class="w-12 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-xs text-slate-200"
           />
           <button
             type="button"
+            data-testid="btn-apply-range"
             @click="applyRange"
             class="rounded border border-indigo-500/30 bg-indigo-500/20 px-2 py-0.5 text-indigo-300 hover:bg-indigo-500/30 transition-colors"
           >
@@ -257,22 +275,21 @@ const applyRange = () => {
 
     <!-- 2-Column Responsive Workspace Layout -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-      <!-- Left Column: Episode Picker Grid -->
-      <div class="lg:col-span-7 xl:col-span-7 space-y-2">
+      <!-- Left Column: Episode Picker Matrix Grid (7 Columns Deck) -->
+      <div data-testid="episode-deck" class="lg:col-span-7 xl:col-span-7 space-y-2">
         <div class="flex items-center justify-between text-xs text-slate-400 pb-1">
-          <span>點選集數即刻於右側預覽，勾選右上角加入下載</span>
+          <span>點選預覽可即刻檢視畫面，勾選方塊加入下載</span>
           <span class="text-violet-400 font-medium">預覽中：第 {{ activePreviewEp }} 集</span>
         </div>
 
-        <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
           <div
             v-for="ep in episodes"
             :key="ep.ep_number"
             data-testid="episode-item"
             :data-episode-number="ep.ep_number"
-            @click="switchPreview(ep.ep_number)"
             :class="[
-              'group relative flex flex-col items-center justify-center rounded-lg border p-2.5 text-xs font-medium cursor-pointer transition-all select-none',
+              'group flex items-center justify-between rounded-lg border p-2 text-xs select-none transition-all',
               activePreviewEp === ep.ep_number
                 ? 'border-violet-500 bg-violet-950/40 text-violet-100 ring-2 ring-violet-500/50 shadow-md shadow-violet-950/50'
                 : selectedEpisodes.includes(ep.ep_number)
@@ -280,33 +297,52 @@ const applyRange = () => {
                   : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:border-slate-700 hover:text-slate-200'
             ]"
           >
-            <!-- Episode Label -->
-            <span class="font-mono">第 {{ ep.ep_number < 10 ? '0' + ep.ep_number : ep.ep_number }} 集</span>
-
-            <!-- Previewing Active Badge -->
-            <div
-              v-if="activePreviewEp === ep.ep_number"
-              class="mt-1 flex items-center gap-1 text-[10px] text-violet-400 font-normal"
-            >
-              <Play class="h-2.5 w-2.5 fill-violet-400 text-violet-400 animate-pulse" />
-              <span>預覽中</span>
-            </div>
-
-            <!-- Decoupled Download Checkbox Trigger (Top-Right) -->
+            <!-- Zone 1: Dedicated Checkbox Gutter -->
             <button
               type="button"
               data-testid="episode-checkbox"
               :data-episode-checkbox="ep.ep_number"
+              :data-checked="selectedEpisodes.includes(ep.ep_number)"
               :aria-label="'勾選第 ' + ep.ep_number + ' 集'"
               @click.stop="toggleEpisode(ep.ep_number)"
               :class="[
-                'absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded transition-all',
+                'flex items-center justify-center rounded p-1 transition-colors shrink-0',
                 selectedEpisodes.includes(ep.ep_number)
-                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                  : 'border border-slate-700 bg-slate-800/80 text-transparent hover:border-slate-500 hover:text-slate-500'
+                  ? 'text-indigo-400 hover:text-indigo-300'
+                  : 'text-slate-500 hover:text-slate-400'
               ]"
             >
-              <Check class="h-2.5 w-2.5 stroke-[3]" />
+              <CheckSquare v-if="selectedEpisodes.includes(ep.ep_number)" class="h-4 w-4" />
+              <Square v-else class="h-4 w-4" />
+            </button>
+
+            <!-- Zone 2: Dedicated, Unobscured Episode Title -->
+            <div class="flex-1 min-w-0 px-2 text-center">
+              <span
+                data-testid="episode-title"
+                :data-episode-title="ep.ep_number"
+                class="font-mono font-medium text-xs text-slate-200 truncate select-none block"
+              >
+                第 {{ ep.ep_number < 10 ? '0' + ep.ep_number : ep.ep_number }} 集
+              </span>
+            </div>
+
+            <!-- Zone 3: Dedicated Preview Trigger Button -->
+            <button
+              type="button"
+              data-testid="btn-preview-ep"
+              :data-episode-preview="ep.ep_number"
+              :data-active="activePreviewEp === ep.ep_number"
+              @click.stop="setPreviewEp(ep.ep_number)"
+              :class="[
+                'flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors shrink-0',
+                activePreviewEp === ep.ep_number
+                  ? 'bg-violet-600 text-white shadow-xs'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
+              ]"
+            >
+              <Play class="h-3 w-3 fill-current" :class="{ 'animate-pulse': activePreviewEp === ep.ep_number }" />
+              <span>{{ activePreviewEp === ep.ep_number ? '播放中' : '預覽' }}</span>
             </button>
           </div>
         </div>
