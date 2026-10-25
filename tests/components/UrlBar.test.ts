@@ -200,4 +200,23 @@ describe('UrlBar.vue', () => {
       expect(emptyState.exists()).toBe(true);
     });
   });
+
+  it('does not have transition-all or focus:ring on input fields to prevent white border flicker/transition on focus', async () => {
+    const wrapper = mount(UrlBar, {
+      props: {
+        loading: false,
+      },
+    });
+
+    const searchInput = wrapper.find('[data-testid="search-input"]');
+    expect(searchInput.classes()).not.toContain('transition-all');
+    expect(searchInput.classes()).not.toContain('focus:ring-1');
+
+    const urlTab = wrapper.find('[data-testid="tab-url"]');
+    await urlTab.trigger('click');
+
+    const urlInput = wrapper.find('[data-testid="url-input"]');
+    expect(urlInput.classes()).not.toContain('transition-all');
+    expect(urlInput.classes()).not.toContain('focus:ring-1');
+  });
 });

@@ -123,7 +123,7 @@ const handleSelect = (result: SearchResult) => {
             data-testid="search-input"
             type="text"
             placeholder="輸入影集名稱或關鍵字"
-            class="w-full rounded-lg border border-slate-700/80 bg-slate-800/80 py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-indigo-500 focus:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            class="w-full rounded-lg border border-slate-700/80 bg-slate-800/80 py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:bg-slate-800 focus:outline-none"
             @keyup.enter="handleSearch"
           />
         </div>
@@ -168,7 +168,7 @@ const handleSelect = (result: SearchResult) => {
             data-testid="url-input"
             type="text"
             placeholder="影集網址"
-            class="w-full rounded-lg border border-slate-700/80 bg-slate-800/80 py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-indigo-500 focus:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            class="w-full rounded-lg border border-slate-700/80 bg-slate-800/80 py-2.5 pl-10 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:bg-slate-800 focus:outline-none"
             @keyup.enter="handleParse"
           />
         </div>
