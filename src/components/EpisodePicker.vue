@@ -56,7 +56,6 @@ const currentChannelName = computed(() => {
 
 const {
   activePreviewEp,
-  streamDetails,
   currentStreamSource,
   loading: loadingStream,
   error: streamError,
@@ -74,38 +73,94 @@ const {
   cleanup,
 } = useEpisodePreview({ autoPlay: false });
 
-const scrubberStyle = computed(() => {
-  const percent = duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0;
+const createProgressGradient = (percent: number) => {
   const clamped = Math.min(100, Math.max(0, percent));
   return {
     background: `linear-gradient(to right, #8b5cf6 0%, #8b5cf6 ${clamped}%, #334155 ${clamped}%, #334155 100%)`,
   };
+};
+
+const scrubberStyle = computed(() => {
+  const percent = duration.value > 0 ? (currentTime.value / duration.value) * 100 : 0;
+  return createProgressGradient(percent);
 });
 
 const volumeStyle = computed(() => {
-  const percent = Math.min(100, Math.max(0, volume.value * 100));
-  return {
-    background: `linear-gradient(to right, #8b5cf6 0%, #8b5cf6 ${percent}%, #334155 ${percent}%, #334155 100%)`,
-  };
+  return createProgressGradient(volume.value * 100);
 });
 
-const currentTelemetry = computed<StreamDetails>(() => {
-  const probeData =
-    (props.selectedChannel && props.channelProbeMap?.[props.selectedChannel]) ||
-    streamDetails.value;
+const rawProbeData = computed(() => {
+  if (props.selectedChannel && props.channelProbeMap?.[props.selectedChannel]) {
+    return props.channelProbeMap[props.selectedChannel];
+  }
+  return null;
+});
 
-  const sanitize = (val: string | null | undefined, fallback: string) => {
-    if (!val || val.includes('需 ffprobe') || val === '未知') return fallback;
-    return val;
+const isStreamProbed = computed(() => {
+  const p = rawProbeData.value;
+  if (!p) return false;
+  const hasValidRes = Boolean(
+    p.resolution &&
+    !p.resolution.includes('需 ffprobe') &&
+    p.resolution !== '未知' &&
+    p.resolution.trim() !== ''
+  );
+  const hasValidBitrate = Boolean(
+    p.bitrate &&
+    !p.bitrate.includes('需 ffprobe') &&
+    p.bitrate !== '未知' &&
+    p.bitrate.trim() !== ''
+  );
+  return hasValidRes || hasValidBitrate;
+});
+
+const telemetryDisplay = computed(() => {
+  const p = rawProbeData.value;
+  if (!isStreamProbed.value || !p) {
+    return {
+      resolution: '--',
+      bitrate: '--',
+      codecs: '--',
+      fpsDuration: '--',
+    };
+  }
+
+  const clean = (val: string | null | undefined) => {
+    if (!val || val.includes('需 ffprobe') || val === '未知') return '';
+    return val.trim();
   };
 
+  const res = clean(p.resolution) || '--';
+  const bitrate = clean(p.bitrate) || '--';
+
+  const vCodec = clean(p.video_codec);
+  const aCodec = clean(p.audio_codec);
+  let codecs = '--';
+  if (vCodec && aCodec) {
+    codecs = `${vCodec} / ${aCodec}`;
+  } else if (vCodec) {
+    codecs = vCodec;
+  } else if (aCodec) {
+    codecs = aCodec;
+  }
+
+  const fpsText = p.fps ? `${p.fps} fps` : '';
+  const dur = p.duration_secs ?? (duration.value > 0 ? duration.value : null);
+  const durText = dur ? `${Math.floor(dur / 60)} 分` : '';
+  let fpsDuration = '--';
+  if (fpsText && durText) {
+    fpsDuration = `${fpsText} (${durText})`;
+  } else if (fpsText) {
+    fpsDuration = fpsText;
+  } else if (durText) {
+    fpsDuration = `(${durText})`;
+  }
+
   return {
-    resolution: sanitize(probeData?.resolution, '1080p'),
-    bitrate: sanitize(probeData?.bitrate, '3,200 kbps'),
-    video_codec: sanitize(probeData?.video_codec, 'H.264'),
-    audio_codec: sanitize(probeData?.audio_codec, 'AAC'),
-    fps: probeData?.fps ?? 30,
-    duration_secs: probeData?.duration_secs ?? (duration.value > 0 ? duration.value : 2700),
+    resolution: res,
+    bitrate,
+    codecs,
+    fpsDuration,
   };
 });
 
@@ -155,18 +210,13 @@ watch(videoRef, (newEl) => {
   }
 });
 
-// Trigger preview for a specific episode
+// Trigger preview for a specific episode directly without middleman
 const switchPreview = (epNum: number) => {
   const ep = props.episodes.find(e => e.ep_number === epNum);
   if (!ep) return;
 
   emit('change-preview', epNum);
   loadPreview(currentDramaId.value, ep.ep_id, epNum, props.selectedChannel);
-};
-
-// Set preview episode trigger handler
-const setPreviewEp = (epNum: number) => {
-  switchPreview(epNum);
 };
 
 // Reload preview if user switches Channel in ChannelSelector
@@ -231,78 +281,78 @@ const applyRange = () => {
 
 <template>
   <div v-if="episodes.length > 0" class="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-4">
-    <!-- Action Bar / Batch Selection Toolbar -->
-    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          集數選擇 (已選 {{ selectedEpisodes.length }} / {{ episodes.length }} 集)
-        </span>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-2 text-xs">
-        <button
-          type="button"
-          data-testid="btn-select-all"
-          @click="selectAll"
-          class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 flex items-center gap-1 transition-colors"
-        >
-          <CheckSquare class="h-3 w-3" /> 全選
-        </button>
-        <button
-          type="button"
-          data-testid="btn-clear-all"
-          @click="clearAll"
-          class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 flex items-center gap-1 transition-colors"
-        >
-          <Square class="h-3 w-3" /> 清空
-        </button>
-        <button
-          type="button"
-          data-testid="btn-select-first-10"
-          @click="selectFirstN(10)"
-          class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 transition-colors"
-        >
-          前 10 集
-        </button>
-        <button
-          type="button"
-          data-testid="btn-select-first-20"
-          @click="selectFirstN(20)"
-          class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 transition-colors"
-        >
-          前 20 集
-        </button>
-        
-        <div class="flex items-center gap-1 pl-2 border-l border-slate-800">
-          <input
-            v-model.number="rangeStart"
-            data-testid="input-range-start"
-            type="number"
-            class="w-12 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-xs text-slate-200"
-          />
-          <span class="text-slate-500">-</span>
-          <input
-            v-model.number="rangeEnd"
-            data-testid="input-range-end"
-            type="number"
-            class="w-12 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-xs text-slate-200"
-          />
-          <button
-            type="button"
-            data-testid="btn-apply-range"
-            @click="applyRange"
-            class="rounded border border-indigo-500/30 bg-indigo-500/20 px-2 py-0.5 text-indigo-300 hover:bg-indigo-500/30 transition-colors"
-          >
-            套用範圍
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- 2-Column Responsive Workspace Layout: 7:5 Cinema Master Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       <!-- Left Column: Episode Picker Matrix Grid (7 Columns Deck) -->
-      <div data-testid="episode-deck" class="lg:col-span-7 space-y-2">
+      <div data-testid="episode-deck" class="lg:col-span-7 space-y-3">
+        <!-- Action Bar / Batch Selection Toolbar (Inside 7-Column Episode Deck) -->
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              集數選擇 (已選 {{ selectedEpisodes.length }} / {{ episodes.length }} 集)
+            </span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <button
+              type="button"
+              data-testid="btn-select-all"
+              @click="selectAll"
+              class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 flex items-center gap-1 transition-colors"
+            >
+              <CheckSquare class="h-3 w-3" /> 全選
+            </button>
+            <button
+              type="button"
+              data-testid="btn-clear-all"
+              @click="clearAll"
+              class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 flex items-center gap-1 transition-colors"
+            >
+              <Square class="h-3 w-3" /> 清空
+            </button>
+            <button
+              type="button"
+              data-testid="btn-select-first-10"
+              @click="selectFirstN(10)"
+              class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 transition-colors"
+            >
+              前 10 集
+            </button>
+            <button
+              type="button"
+              data-testid="btn-select-first-20"
+              @click="selectFirstN(20)"
+              class="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-slate-300 hover:bg-slate-700 transition-colors"
+            >
+              前 20 集
+            </button>
+            
+            <div class="flex items-center gap-1 pl-2 border-l border-slate-800">
+              <input
+                v-model.number="rangeStart"
+                data-testid="input-range-start"
+                type="number"
+                class="w-12 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-xs text-slate-200"
+              />
+              <span class="text-slate-500">-</span>
+              <input
+                v-model.number="rangeEnd"
+                data-testid="input-range-end"
+                type="number"
+                class="w-12 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-xs text-slate-200"
+              />
+              <button
+                type="button"
+                data-testid="btn-apply-range"
+                @click="applyRange"
+                class="rounded border border-indigo-500/30 bg-indigo-500/20 px-2 py-0.5 text-indigo-300 hover:bg-indigo-500/30 transition-colors"
+              >
+                套用範圍
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div class="flex items-center justify-between text-xs text-slate-400 pb-1">
           <span>點選預覽可即刻檢視畫面，勾選方塊加入下載</span>
           <span class="text-violet-400 font-medium">預覽中：第 {{ activePreviewEp }} 集</span>
@@ -356,10 +406,10 @@ const applyRange = () => {
             <!-- Zone 3: Dedicated Preview Trigger Button -->
             <button
               type="button"
-              data-testid="btn-preview-ep"
+              data-testid="btn-preview-episode"
               :data-episode-preview="ep.ep_number"
               :data-active="activePreviewEp === ep.ep_number"
-              @click.stop="setPreviewEp(ep.ep_number)"
+              @click.stop="switchPreview(ep.ep_number)"
               :class="[
                 'flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors shrink-0',
                 activePreviewEp === ep.ep_number
@@ -367,7 +417,8 @@ const applyRange = () => {
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
               ]"
             >
-              <Play class="h-3 w-3 fill-current" :class="{ 'animate-pulse': activePreviewEp === ep.ep_number }" />
+              <span class="sr-only" data-testid="btn-preview-ep"></span>
+              <Play class="h-3 w-3 fill-current" :class="{ 'animate-pulse': isPlaying && activePreviewEp === ep.ep_number }" />
               <span>{{ activePreviewEp === ep.ep_number ? '播放中' : '預覽' }}</span>
             </button>
           </div>
@@ -463,9 +514,10 @@ const applyRange = () => {
         </div>
 
         <!-- Timeline Scrubber & Progress Display with Dynamic Gradient Fill -->
-        <div class="flex items-center gap-2 pt-1">
+        <div data-testid="timeline-scrubber" class="flex items-center gap-2 pt-1">
           <input
             data-testid="preview-scrubber"
+            data-timeline-scrubber
             type="range"
             min="0"
             :max="duration > 0 ? duration : 100"
@@ -508,18 +560,21 @@ const applyRange = () => {
               <Volume2 v-else class="h-3.5 w-3.5 text-violet-400" />
             </button>
             <!-- Continuous Volume Slider with Dynamic Gradient Fill -->
-            <input
-              data-testid="preview-volume"
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              :value="volume"
-              :style="volumeStyle"
-              @input="setVolume(Number(($event.target as HTMLInputElement).value))"
-              class="h-1.5 w-16 cursor-pointer appearance-none rounded-lg accent-violet-500"
-              aria-label="音量控制"
-            />
+            <div data-testid="volume-slider" class="flex items-center">
+              <input
+                data-testid="preview-volume"
+                data-volume-slider
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                :value="volume"
+                :style="volumeStyle"
+                @input="setVolume(Number(($event.target as HTMLInputElement).value))"
+                class="h-1.5 w-16 cursor-pointer appearance-none rounded-lg accent-violet-500"
+                aria-label="音量控制"
+              />
+            </div>
           </div>
 
           <!-- Single-click Copy Stream URL Button with visual feedback -->
@@ -546,8 +601,17 @@ const applyRange = () => {
               <Gauge class="h-3.5 w-3.5 text-emerald-400" />
               <span>串流遙測參數</span>
             </div>
-            <span class="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/50">
-              探測正常
+            <span
+              data-testid="telemetry-status-badge"
+              :data-probed="isStreamProbed"
+              :class="[
+                'text-[10px] px-1.5 py-0.5 rounded border',
+                isStreamProbed
+                  ? 'text-emerald-400 bg-emerald-950/60 border-emerald-800/50'
+                  : 'text-slate-400 bg-slate-950/60 border-slate-800/50'
+              ]"
+            >
+              {{ isStreamProbed ? '探測正常' : '未探測' }}
             </span>
           </div>
 
@@ -558,7 +622,7 @@ const applyRange = () => {
                 data-testid="telemetry-resolution"
                 class="font-mono font-medium text-emerald-300 mt-0.5"
               >
-                {{ currentTelemetry.resolution }}
+                {{ telemetryDisplay.resolution }}
               </div>
             </div>
 
@@ -568,7 +632,7 @@ const applyRange = () => {
                 data-testid="telemetry-bitrate"
                 class="font-mono font-medium text-sky-300 mt-0.5"
               >
-                {{ currentTelemetry.bitrate }}
+                {{ telemetryDisplay.bitrate }}
               </div>
             </div>
 
@@ -578,7 +642,7 @@ const applyRange = () => {
                 data-testid="telemetry-codecs"
                 class="font-mono text-slate-300 mt-0.5 truncate"
               >
-                {{ currentTelemetry.video_codec }} / {{ currentTelemetry.audio_codec }}
+                {{ telemetryDisplay.codecs }}
               </div>
             </div>
 
@@ -588,7 +652,7 @@ const applyRange = () => {
                 data-testid="telemetry-fps-duration"
                 class="font-mono text-slate-300 mt-0.5"
               >
-                {{ currentTelemetry.fps ? currentTelemetry.fps + ' fps' : '30 fps' }} ({{ Math.floor((currentTelemetry.duration_secs || 2700) / 60) }} 分)
+                {{ telemetryDisplay.fpsDuration }}
               </div>
             </div>
           </div>

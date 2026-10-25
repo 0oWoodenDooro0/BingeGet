@@ -93,9 +93,10 @@ describe('EpisodePicker.vue', () => {
       const title = item.find('[data-testid="episode-title"]');
       expect(title.exists()).toBe(true);
 
-      // Zone 3: Dedicated preview button
-      const previewBtn = item.find('[data-testid="btn-preview-ep"]');
+      // Zone 3: Dedicated preview button (testing both btn-preview-episode and legacy btn-preview-ep seam)
+      const previewBtn = item.find('[data-testid="btn-preview-episode"]');
       expect(previewBtn.exists()).toBe(true);
+      expect(item.find('[data-testid="btn-preview-ep"]').exists()).toBe(true);
     });
 
     // Checkbox reflects selected status
@@ -160,7 +161,7 @@ describe('EpisodePicker.vue', () => {
     expect(currentChangeEventsCount).toBe(initialChangeEventsCount);
   });
 
-  it('supports batch selection toolbar: select-all, clear-all, select-first-10, and select-first-20', async () => {
+  it('supports batch selection toolbar placed inside episode-deck: select-all, clear-all, select-first-10, and select-first-20', async () => {
     const twentyFiveEpisodes: EpisodeInfo[] = Array.from({ length: 25 }, (_, i) => ({
       ep_number: i + 1,
       ep_title: `第${i + 1}集`,
@@ -177,10 +178,14 @@ describe('EpisodePicker.vue', () => {
       },
     });
 
-    const btnSelectAll = wrapper.find('[data-testid="btn-select-all"]');
-    const btnClearAll = wrapper.find('[data-testid="btn-clear-all"]');
-    const btnFirst10 = wrapper.find('[data-testid="btn-select-first-10"]');
-    const btnFirst20 = wrapper.find('[data-testid="btn-select-first-20"]');
+    // Toolbar must be inside episode-deck (7 Columns deck)
+    const episodeDeck = wrapper.find('[data-testid="episode-deck"]');
+    expect(episodeDeck.exists()).toBe(true);
+
+    const btnSelectAll = episodeDeck.find('[data-testid="btn-select-all"]');
+    const btnClearAll = episodeDeck.find('[data-testid="btn-clear-all"]');
+    const btnFirst10 = episodeDeck.find('[data-testid="btn-select-first-10"]');
+    const btnFirst20 = episodeDeck.find('[data-testid="btn-select-first-20"]');
 
     expect(btnSelectAll.exists()).toBe(true);
     expect(btnClearAll.exists()).toBe(true);
@@ -268,6 +273,44 @@ describe('EpisodePicker.vue', () => {
     // Standby overlay is rendered before playback begins
     const standbyOverlay = wrapper.find('[data-testid="preview-standby-overlay"]');
     expect(standbyOverlay.exists()).toBe(true);
+  });
+
+  it('does not pulse the play icon during paused standby and only pulses when actively playing', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLVideoElement) {
+      if (this.onplay) {
+        this.onplay(new Event('play'));
+      }
+      return Promise.resolve();
+    });
+
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: 'ikzy',
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 20));
+    await wrapper.vm.$nextTick();
+
+    const ep1Btn = wrapper.find('[data-episode-preview="1"]');
+    expect(ep1Btn.exists()).toBe(true);
+
+    // During standby/paused state: Play icon must NOT have animate-pulse class
+    const standbyPlayIcon = ep1Btn.find('svg');
+    expect(standbyPlayIcon.exists()).toBe(true);
+    expect(standbyPlayIcon.classes()).not.toContain('animate-pulse');
+
+    // Trigger explicit playback
+    const playPauseBtn = wrapper.find('[data-testid="btn-play-pause"]');
+    await playPauseBtn.trigger('click');
+    await wrapper.vm.$nextTick();
+
+    // While playing: Active preview episode Play icon must have animate-pulse
+    const playingPlayIcon = ep1Btn.find('svg');
+    expect(playingPlayIcon.classes()).toContain('animate-pulse');
   });
 
   it('triggers play() when the user explicitly clicks the play button', async () => {
@@ -379,10 +422,46 @@ describe('EpisodePicker.vue', () => {
     expect(fpsDuration.exists()).toBe(true);
     expect(fpsDuration.text()).toContain('60 fps');
 
+    const badge = wrapper.find('[data-testid="telemetry-status-badge"]');
+    expect(badge.attributes('data-probed')).toBe('true');
+
     // Absolutely NO debug placeholders like "需 ffprobe"
     expect(res.text()).not.toContain('ffprobe');
     expect(bitrate.text()).not.toContain('ffprobe');
     expect(codecs.text()).not.toContain('ffprobe');
+  });
+
+  it('renders clean unprobed placeholders and unprobed badge when channelProbeMap is empty or missing', async () => {
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: 'ikzy',
+        channelProbeMap: {},
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+    await wrapper.vm.$nextTick();
+
+    const telemetry = wrapper.find('[data-testid="telemetry-dashboard"]');
+    expect(telemetry.exists()).toBe(true);
+
+    const res = wrapper.find('[data-testid="telemetry-resolution"]');
+    expect(res.text()).toBe('--');
+
+    const bitrate = wrapper.find('[data-testid="telemetry-bitrate"]');
+    expect(bitrate.text()).toBe('--');
+
+    const codecs = wrapper.find('[data-testid="telemetry-codecs"]');
+    expect(codecs.text()).toBe('--');
+
+    const fpsDuration = wrapper.find('[data-testid="telemetry-fps-duration"]');
+    expect(fpsDuration.text()).toBe('--');
+
+    const badge = wrapper.find('[data-testid="telemetry-status-badge"]');
+    expect(badge.attributes('data-probed')).toBe('false');
   });
 
   it('updates telemetry dashboard immediately when selectedChannel switches', async () => {
@@ -412,7 +491,7 @@ describe('EpisodePicker.vue', () => {
     expect(wrapper.find('[data-testid="telemetry-bitrate"]').text()).toContain('3,200 kbps');
   });
 
-  it('refines player controls: removes download toggle button and applies dynamic gradient fill to scrubber and volume', async () => {
+  it('refines player controls: removes download toggle button and applies dynamic gradient fill to scrubber and volume with full seam compatibility', async () => {
     const wrapper = mount(EpisodePicker, {
       props: {
         episodes: sampleEpisodes,
@@ -433,19 +512,25 @@ describe('EpisodePicker.vue', () => {
     const muteBtn = wrapper.find('[data-testid="btn-mute"]');
     expect(muteBtn.exists()).toBe(true);
 
-    // 3. Scrubber with dynamic gradient fill
+    // 3. Scrubber with dynamic gradient fill (compatible with preview-scrubber and timeline-scrubber seams)
     const scrubber = wrapper.find('[data-testid="preview-scrubber"]');
     expect(scrubber.exists()).toBe(true);
     expect(scrubber.attributes('style')).toContain('linear-gradient');
     expect(scrubber.attributes('style')).toContain('#8b5cf6');
     expect(scrubber.attributes('style')).toContain('#334155');
 
-    // 4. Volume slider with dynamic gradient fill
+    const timelineScrubber = wrapper.find('[data-testid="timeline-scrubber"]');
+    expect(timelineScrubber.exists()).toBe(true);
+
+    // 4. Volume slider with dynamic gradient fill (compatible with preview-volume and volume-slider seams)
     const volumeSlider = wrapper.find('[data-testid="preview-volume"]');
     expect(volumeSlider.exists()).toBe(true);
     expect(volumeSlider.attributes('style')).toContain('linear-gradient');
     expect(volumeSlider.attributes('style')).toContain('#8b5cf6');
     expect(volumeSlider.attributes('style')).toContain('#334155');
+
+    const volumeSliderLegacy = wrapper.find('[data-testid="volume-slider"]');
+    expect(volumeSliderLegacy.exists()).toBe(true);
 
     // 5. Single-click Copy Stream URL button in player control bar
     const copyBtn = wrapper.find('[data-testid="btn-copy-stream-url"]');
