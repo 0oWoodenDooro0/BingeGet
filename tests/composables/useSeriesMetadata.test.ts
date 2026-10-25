@@ -26,6 +26,7 @@ describe('useSeriesMetadata composable', () => {
 
     const data = await parseUrl('https://chinaq.fun/tv-cn/123456/');
     expect(data.drama_id).toBe('123456');
+    expect(data.source_id).toBe('chinaq');
     expect(data.episodes.length).toBe(36);
     expect(metadata.value).toEqual(data);
     expect(selectedChannel.value).toBe(data.channels[0].id);
@@ -35,6 +36,7 @@ describe('useSeriesMetadata composable', () => {
   it('parses url via tauri invoke when available', async () => {
     const mockMetadata: SeriesMetadata = {
       drama_id: '999',
+      source_id: 'chinaq',
       category_slug: 'tv-kr',
       channels: [
         { id: 'ch1', name: 'Channel 1' },
@@ -58,6 +60,7 @@ describe('useSeriesMetadata composable', () => {
 
     expect(data).toEqual(mockMetadata);
     expect(metadata.value).toEqual(mockMetadata);
+    expect(metadata.value?.source_id).toBe('chinaq');
     expect(selectedChannel.value).toBe('ch1');
     expect(selectedEpisodes.value).toEqual([1, 2]);
   });

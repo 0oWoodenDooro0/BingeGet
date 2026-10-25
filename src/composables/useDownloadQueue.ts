@@ -180,6 +180,7 @@ export function useDownloadQueue(options: UseDownloadQueueOptions = {}) {
     error.value = '';
 
     const categorySlug = metadata?.category_slug || 'tv-cn';
+    const sourceId = metadata?.source_id || 'chinaq';
     const newItems: QueueItem[] = selectedEpisodes.map((ep, idx) => ({
       id: idx + 1,
       spec: {
@@ -200,6 +201,7 @@ export function useDownloadQueue(options: UseDownloadQueueOptions = {}) {
         const { invoke } = await import('@tauri-apps/api/core');
         const payload: DownloadQueuePayload = {
           drama_id: metadata?.drama_id || '',
+          source_id: sourceId,
           category_slug: categorySlug,
           channel_id: selectedChannel,
           episodes: selectedEpisodes,

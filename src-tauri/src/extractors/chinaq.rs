@@ -233,7 +233,7 @@ impl SiteExtractor for ChinaQExtractor {
     }
 
     async fn fetch_series_metadata(&self, client: &reqwest::Client, url: &str) -> Result<SeriesMetadata> {
-        let (category_slug, drama_id) = self.extract_category_and_drama_id(url)?;
+        let (category_slug, drama_id) = self.extract_category_and_drama_id(url)? ;
         let drama_url = format!("https://chinaq.fun/{}/{}/", category_slug, drama_id);
 
         let html = client
@@ -266,6 +266,7 @@ impl SiteExtractor for ChinaQExtractor {
 
         Ok(SeriesMetadata {
             drama_id,
+            source_id: "chinaq".to_string(),
             category_slug: Some(category_slug),
             cover_url,
             episodes,

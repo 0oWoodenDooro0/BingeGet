@@ -7,8 +7,6 @@ use regex::Regex;
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
-use crate::extractors::chinaq::ChinaQExtractor;
-use crate::extractors::SiteExtractor;
 use crate::models::StreamDetails;
 
 static STREAM_INF_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -28,7 +26,7 @@ static BITRATE_HINT_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("Invalid bitrate hint regex")
 });
 
-static PROBE_CACHE: LazyLock<RwLock<HashMap<(String, String, String), (Instant, StreamDetails)>>> =
+static PROBE_CACHE: LazyLock<RwLock<HashMap<(String, String, String, String), (Instant, StreamDetails)>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 const CACHE_TTL: Duration = Duration::from_secs(1800); // 30 minutes
@@ -197,7 +195,7 @@ pub fn parse_ffprobe_json_output(json_str: &str) -> Result<StreamDetails> {
         let parts: Vec<&str> = rate.split('/').collect();
         if parts.len() == 2 {
             let num: f32 = parts[0].parse().ok()?;
-            let den: f32 = parts[1].parse().ok()? ;
+            let den: f32 = parts[1].parse().ok()?;
             if den > 0.0 {
                 return Some((num / den).round() as u32);
             }
@@ -268,8 +266,15 @@ pub async fn probe_stream_core(
     ep_id: &str,
     channel: &str,
     ffprobe_path: Option<&str>,
+    source_id: Option<&str>,
 ) -> Result<StreamDetails, String> {
-    let cache_key = (drama_id.to_string(), ep_id.to_string(), channel.to_string());
+    let sid = source_id.unwrap_or("chinaq");
+    let cache_key = (
+        sid.to_string(),
+        drama_id.to_string(),
+        ep_id.to_string(),
+        channel.to_string(),
+    );
 
     // 1. Check in-memory cache
     {
@@ -282,7 +287,11 @@ pub async fn probe_stream_core(
     }
 
     // 2. Resolve M3U8 URL via Extractor
-    let extractor = ChinaQExtractor::new();
+    let registry = crate::extractors::global_registry();
+    let extractor = registry
+        .get_by_source_id(sid)
+        .ok_or_else(|| format!("Extractor not found for source: {}", sid))?;
+
     let m3u8_url = extractor
         .fetch_m3u8_for_episode(client, drama_id, ep_id, channel)
         .await
