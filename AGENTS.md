@@ -1,55 +1,29 @@
 # Agent Guidelines for BingeGet
 
-## 1. T3 Code Worktree & Branch Management
+## Quick Commands
 
-- **Sandbox Boundary**: Do NOT attempt to run shell commands or `cd` into paths outside the active workspace directory (such as other worktrees or the root repo if running in a worktree). The agent workspace sandbox will block access (`denied by pre-tool hook`). Always execute commands relative to the current working tree.
-- **Resolving Branch Lock in Root**:
-  - If a branch cannot be checked out because an external worktree is using it (`fatal: '<branch>' is already used by worktree at ...`):
-    - Inspect existing worktrees: `npm run worktrees` (or `git worktree list`).
-    - Remove the stale worktree directly from the repository root: `git worktree remove --force <worktreePath>` or `npm run worktree:prune`.
-- **Working in an Isolated Worktree**:
-  - When child tasks or PR stacks need an isolated worktree checkout, use T3 Code's native tooling:
-    - To move the current thread into a worktree: call `t3_worktree_handoff`.
-    - To launch a new agent/thread in a worktree: call `t3_thread_launch` with `workspaceStrategy: { "type": "worktree", "branch": "...", "startFromOrigin": false }`.
-    - Do NOT manually run `git worktree add` in shell prompts; let T3 bind the workspace and permissions automatically.
-  - **Setup Script & Dependency Fail-Safe**: T3 Code project script `setup` (`npm run setup`) is configured with `runOnWorktreeCreate: true`. However, if the project setup script fails, gets skipped, or `node_modules` is absent (e.g. `vue-tsc: command not found`), the agent must run `npm run setup` (or `npm install`) as the first step before running checks or tests.
+| Task | Command |
+|---|---|
+| Setup & Git hooks | `npm run setup` |
+| Frontend checks | `npm run test:fe` |
+| Backend checks | `npm run test:be` |
+| Full test suite | `npm test` |
+| Prune stale worktrees | `npm run worktree:prune` |
 
-## 2. Quality & Validation Commands
+## Critical Guardrails
 
-- **Setup & Hooks**: `npm run setup` (installs node modules and wires `.githooks`).
-- **Frontend checks**: `npm run test:fe` (runs lockfile sync check + theme guardrails check + `vue-tsc --noEmit` + `vitest run`).
-- **Backend checks**: `npm run test:be` (`cargo test --manifest-path src-tauri/Cargo.toml`).
-- **Full test suite**: `npm test` or `npm run check`.
-- **Pre-commit**: Automatically validates lockfile synchronization, theme guardrails, TypeScript types, and ts-rs schema generation (`export_schema_test`).
-- **Theme Guardrails**: Native `<select>` and `<option>` elements in WebView require `color-scheme: dark` and explicit dark background classes (`bg-slate-900 text-slate-100`) to avoid white background artifacts.
-- **Lockfile Synchronization**: Always ensure `package-lock.json` is synchronized with `package.json` (`npm run check:lockfile`). Modifying `package.json` without updating the lockfile will fail pre-commit and CI.
+- **Dependencies**: If `node_modules` or CLI tools (`vue-tsc`) are missing, run `npm run setup` first.
+- **Lockfile Sync**: Always keep `package-lock.json` in sync with `package.json` (`npm run check:lockfile`). Modifying `package.json` without updating the lockfile fails pre-commit and CI.
+- **Dark Theme (WebView)**: Native `<select>` and `<option>` elements require `color-scheme: dark` and dark background classes (`bg-slate-900 text-slate-100`) to prevent white artifacts.
+- **Branch Lock**: If git checkout fails due to a stale worktree lock, run `npm run worktree:prune` or `git worktree remove --force <path>`.
 
-## 3. Tool Economy & Search Best Practices
+## Development & Testing Rules
 
-- **Codebase Search Economy**: Avoid running unconstrained recursive searches (e.g. `grep -rn` without directory limits) that traverse build artifacts or large trees.
-  - Always prefer `git grep "<pattern>"` which automatically respects `.gitignore` and ignores `target/`, `node_modules/`, and `dist/`.
-  - When using `find` or `grep`, explicitly exclude build directories (e.g. `--exclude-dir={target,node_modules,dist}`).
-- **Non-Interactive GitHub CLI Guidelines**:
-  - When invoking `gh` commands in automated or non-interactive environments, always pass explicit arguments (e.g. `gh run view <run-id> --job=<job-id>` or `gh run list --limit 1 --json databaseId`). Never execute bare commands like `gh run view` or `gh run rerun` that trigger interactive TUI selection menus, which cause agent command timeouts.
-- **CI Polling & Wait Cadence**:
-  - Understand project build durations: Frontend checks take ~15-20s, whereas Backend Rust + Tauri builds take ~1.5-2.5 minutes on GitHub Actions.
-  - Avoid tight polling loops (<15s) when checking CI status. Use appropriate background sleep durations (e.g. 20s-30s) or scheduler triggers to minimize redundant process invocations and token consumption.
+- **Behavioral Tests Only**: Assert functional behavior, state changes, and event payloads. Do not assert static copy or labels.
+- **Extractor Matrix**: Verify all supported regional slugs (`tv-cn`, `tv-kr`, `tv-tw`, `tv-jp`, `tv-hk`) when testing extractors.
+- **UI Decoupling**: Separate state presentation (e.g. search results) from input controls (e.g. URL bar).
 
-## 4. Architecture & Component Modularity
+## Detailed References
 
-- **Single Responsibility Principle for UI Components**:
-  - Compound UI components (e.g. those supporting dual input modes or complex dropdowns) must decouple input/control coordination from list/state presentation.
-  - Separate stateful or heavy render trees (such as search result cards, loading skeleton states, and empty states) into focused child components (e.g. `SearchResultList.vue` alongside `UrlBar.vue`). This prevents divergent change and enables isolated unit testing of state transitions.
-- **Seam-Driven Referer & Extractor Boundaries**:
-  - Avoid hardcoding site-specific URL patterns, query formats, or referer paths outside extractor modules.
-  - All download engines, queue dispatchers, and IPC commands must query the corresponding `SiteExtractor` method (e.g. `build_episode_referer`) to obtain canonical network parameters.
-
-## 5. Testing & Extractor Principles
-
-- **SiteExtractor URL Matrix Coverage**: When implementing or updating URL parsing or extractor logic (e.g. `ChinaQExtractor`), unit tests must verify against a multi-category URL matrix (covering all supported region slugs like `tv-cn`, `tv-kr`, `tv-tw`, `tv-jp`, `tv-hk`), rather than only testing a single default category.
-- **Focus on Behavioral Logic and State Transitions**: Tests must verify public interfaces and critical behaviors (such as event emission and payloads, state transitions, conditional button disabling/enabling, external API / Plugin calls, and cancellation/error handling) rather than static DOM content or hardcoded copy.
-- **Strictly Prohibit Non-Logical Text Assertions**:
-  - Do not write non-logical tests asserting static text, placeholders, or template labels.
-  - Assertions on static copy contain no business logic and are fragile to minor copy tweaks.
-  - Test value lies in verifying functional correctness and boundary conditions, not literal copy.
-- **UI Input Placeholder Convention**: Input placeholders should be direct and concise (e.g. `輸入影集名稱或關鍵字` or `影集網址`), avoiding verbose examples or prefixes like `例如：...`.
+- Architecture & Component Modularity: [`docs/architecture.md`](docs/architecture.md)
+- Testing & Extractor Principles: [`docs/testing.md`](docs/testing.md)
