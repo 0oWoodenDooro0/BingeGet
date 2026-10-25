@@ -53,4 +53,22 @@ describe('ChannelSelector.vue', () => {
     expect(ikzyBadge.exists()).toBe(true);
     expect(ikzyBadge.text()).toContain('1080p');
   });
+
+  it('renders clean summary counter and does not render sorting subtitle or priority badge in header', () => {
+    const wrapper = mount(ChannelSelector, {
+      props: {
+        channels: sampleChannels,
+        selectedChannel: 'ikzy',
+      },
+    });
+
+    const counter = wrapper.find('[data-testid="channel-summary-counter"]');
+    expect(counter.exists()).toBe(true);
+    expect(counter.text()).toContain(String(sampleChannels.length));
+
+    expect(wrapper.find('[data-testid="channel-quality-priority-badge"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="channel-sort-subtitle"]').exists()).toBe(false);
+    expect(wrapper.html().includes('依畫質高至低排序')).toBe(false);
+    expect(wrapper.html().includes('高畫質優先')).toBe(false);
+  });
 });

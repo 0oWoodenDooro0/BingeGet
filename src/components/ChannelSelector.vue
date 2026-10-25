@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Radio, Sparkles } from 'lucide-vue-next';
+import { Radio } from 'lucide-vue-next';
 import type { ChannelOption } from '../types';
 import {
   sortChannelsByQuality,
@@ -39,17 +39,12 @@ const channelBadgesMap = computed(() => {
       <div class="flex items-center gap-2">
         <Radio class="h-4 w-4 text-indigo-400" />
         <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          播放頻道 (依畫質高至低排序)
+          播放頻道
         </span>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="text-[11px] text-emerald-400 flex items-center gap-1">
-          <Sparkles class="h-3 w-3" /> 高畫質優先
-        </span>
-        <span class="text-xs text-slate-400">
-          共 {{ sortedChannels.length }} 個頻道
-        </span>
-      </div>
+      <span data-testid="channel-summary-counter" class="text-xs text-slate-400">
+        共 {{ sortedChannels.length }} 個可用頻道
+      </span>
     </div>
 
     <!-- Quality Card Grid View -->
