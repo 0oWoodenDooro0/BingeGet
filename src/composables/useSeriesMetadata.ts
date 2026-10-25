@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import type { SeriesMetadata, SearchResult } from '../types';
 import { isTauri, getErrorMessage } from './useSystemEnvironment';
+import { sortChannelsByQuality } from '../utils/channelQuality';
 
 export function useSeriesMetadata() {
   const metadata = ref<SeriesMetadata | null>(null);
@@ -78,6 +79,7 @@ export function useSeriesMetadata() {
         data = {
           drama_id: dramaId,
           category_slug: 'tv-cn',
+          cover_url: `https://chinaq.fun/img/${dramaId}.jpg`,
           episodes: Array.from({ length: 36 }, (_, i) => ({
             ep_number: i + 1,
             ep_id: `ep${i + 1}`,
@@ -95,6 +97,7 @@ export function useSeriesMetadata() {
       metadata.value = data;
 
       if (data.channels && data.channels.length > 0) {
+        data.channels = sortChannelsByQuality(data.channels);
         selectedChannel.value = data.channels[0].id;
       } else {
         selectedChannel.value = '';
@@ -133,6 +136,7 @@ export function useSeriesMetadata() {
           url: 'https://chinaq.fun/tv-kr/202639642/',
           source_id: 'chinaq',
           source_name: 'ChinaQ',
+          cover_url: 'https://chinaq.fun/img/202639642.jpg',
         },
       ];
     }

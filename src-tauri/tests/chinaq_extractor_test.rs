@@ -214,16 +214,19 @@ fn test_chinaq_parse_search_results() {
     assert_eq!(results[0].url, "https://chinaq.fun/tv-cn/202312271/");
     assert_eq!(results[0].source_id, "chinaq");
     assert_eq!(results[0].source_name, "ChinaQ");
+    assert_eq!(results[0].cover_url.as_deref(), Some("https://chinaq.fun/img/202312271.jpg"));
 
     // 2. Simplified Chinese query on Traditional title: "机智医生" -> "機智醫生生活"
     let s2t_results = extractor.parse_search_results(sample_all_html, "机智医生").unwrap();
     assert_eq!(s2t_results.len(), 1);
     assert_eq!(s2t_results[0].title, "機智醫生生活");
+    assert_eq!(s2t_results[0].cover_url.as_deref(), Some("https://chinaq.fun/img/202106171.jpg"));
 
     // 3. Full-width ASCII query: "Ｄｏｃｔｏｒ" -> "Doctor X"
     let fullwidth_results = extractor.parse_search_results(sample_all_html, "Ｄｏｃｔｏｒ").unwrap();
     assert_eq!(fullwidth_results.len(), 1);
     assert_eq!(fullwidth_results[0].title, "Doctor X");
+    assert_eq!(fullwidth_results[0].cover_url.as_deref(), Some("https://chinaq.fun/img/202639642.jpg"));
 
     // 4. Case-insensitive English: "doctor x" -> "Doctor X"
     let lower_results = extractor.parse_search_results(sample_all_html, "doctor x").unwrap();
@@ -251,6 +254,7 @@ async fn test_chinaq_live_metadata_and_m3u8_fetch() {
         .expect("Live series metadata should succeed for tv-kr");
 
     assert_eq!(metadata.drama_id, "202639642");
+    assert_eq!(metadata.cover_url.as_deref(), Some("https://chinaq.fun/img/202639642.jpg"));
     assert!(!metadata.episodes.is_empty(), "Should parse episodes");
     assert!(!metadata.channels.is_empty(), "Should parse available channels");
 }

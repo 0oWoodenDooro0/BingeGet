@@ -14,4 +14,6 @@ fn test_export_all_typescript_schemas() {
     EpisodeStatusPayload::export(&cfg).expect("failed to export EpisodeStatusPayload");
     DownloadTaskSpec::export(&cfg).expect("failed to export DownloadTaskSpec");
     DownloadProgress::export(&cfg).expect("failed to export DownloadProgress");
+    StreamDetails::export(&cfg).expect("failed to export StreamDetails");
+    PreviewStreamInfo::export(&cfg).expect("failed to export PreviewStreamInfo");
 }

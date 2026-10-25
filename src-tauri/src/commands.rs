@@ -1,12 +1,14 @@
 use std::path::Path;
 use tauri::State;
 
+use crate::engine::probe::probe_stream_core;
 use crate::engine::queue::run_download_queue;
 pub use crate::engine::queue::start_download_queue_core;
 use crate::extractors::chinaq::ChinaQExtractor;
 use crate::extractors::SiteExtractor;
 use crate::models::{
-    DownloadQueuePayload, SearchResult, SeriesMetadata, SystemEnvironment,
+    DownloadQueuePayload, PreviewStreamInfo, SearchResult, SeriesMetadata, StreamDetails,
+    SystemEnvironment,
 };
 
 pub fn detect_system_environment_core() -> SystemEnvironment {
@@ -134,6 +136,47 @@ pub async fn search_series(
     keyword: String,
 ) -> Result<Vec<SearchResult>, String> {
     search_series_core(&client, &keyword).await
+}
+
+#[tauri::command]
+pub async fn probe_episode_stream(
+    client: State<'_, reqwest::Client>,
+    drama_id: String,
+    ep_id: String,
+    channel: String,
+) -> Result<StreamDetails, String> {
+    let ffprobe_path = if Path::new("/usr/bin/ffprobe").is_file() {
+        Some("/usr/bin/ffprobe")
+    } else {
+        None
+    };
+    probe_stream_core(&client, &drama_id, &ep_id, &channel, ffprobe_path).await
+}
+
+#[tauri::command]
+pub async fn get_episode_preview_stream(
+    client: State<'_, reqwest::Client>,
+    drama_id: String,
+    ep_id: String,
+    channel: String,
+) -> Result<PreviewStreamInfo, String> {
+    let m3u8_url = fetch_episode_m3u8_core(&client, &drama_id, &ep_id, &channel).await?;
+    let chinaq = ChinaQExtractor::new();
+    let referer = chinaq.build_episode_referer("", &drama_id, &ep_id);
+
+    let proxy_port = crate::engine::proxy::start_streaming_proxy(client.inner().clone())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let proxy_url = Some(crate::engine::proxy::build_proxy_url(
+        proxy_port, &m3u8_url, &referer,
+    ));
+
+    Ok(PreviewStreamInfo {
+        m3u8_url,
+        referer,
+        proxy_url,
+    })
 }
 
 #[tauri::command]

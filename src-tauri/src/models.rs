@@ -23,6 +23,8 @@ pub struct SeriesMetadata {
     pub drama_id: String,
     #[serde(default)]
     pub category_slug: Option<String>,
+    #[serde(default)]
+    pub cover_url: Option<String>,
     pub episodes: Vec<EpisodeInfo>,
     pub channels: Vec<ChannelOption>,
 }
@@ -36,6 +38,8 @@ pub struct SearchResult {
     pub url: String,
     pub source_id: String,
     pub source_name: String,
+    #[serde(default)]
+    pub cover_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -96,4 +100,23 @@ pub struct DownloadProgress {
     pub percent: f32,
     pub speed: String,
     pub eta: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/types/generated/")]
+pub struct StreamDetails {
+    pub resolution: String,
+    pub bitrate: String,
+    pub video_codec: String,
+    pub audio_codec: String,
+    pub fps: Option<u32>,
+    pub duration_secs: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/types/generated/")]
+pub struct PreviewStreamInfo {
+    pub m3u8_url: String,
+    pub referer: String,
+    pub proxy_url: Option<String>,
 }
