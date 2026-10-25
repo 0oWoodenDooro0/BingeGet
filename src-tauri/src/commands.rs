@@ -1,7 +1,13 @@
 use std::path::Path;
+use tauri::State;
+
+use crate::engine::queue::run_download_queue;
+pub use crate::engine::queue::start_download_queue_core;
 use crate::extractors::chinaq::ChinaQExtractor;
 use crate::extractors::SiteExtractor;
-use crate::models::{SearchResult, SeriesMetadata, SystemEnvironment};
+use crate::models::{
+    DownloadQueuePayload, SearchResult, SeriesMetadata, SystemEnvironment,
+};
 
 pub fn detect_system_environment_core() -> SystemEnvironment {
     let check_path = |name: &str, preferred: &str| -> Option<String> {
@@ -97,4 +103,44 @@ pub async fn search_series_core(
     }
 
     Ok(all_results)
+}
+
+#[tauri::command]
+pub fn get_system_environment() -> SystemEnvironment {
+    detect_system_environment_core()
+}
+
+#[tauri::command]
+pub async fn parse_series_metadata(
+    client: State<'_, reqwest::Client>,
+    url: String,
+) -> Result<SeriesMetadata, String> {
+    parse_series_metadata_core(&client, &url).await
+}
+
+#[tauri::command]
+pub async fn fetch_episode_m3u8(
+    client: State<'_, reqwest::Client>,
+    drama_id: String,
+    ep_id: String,
+    channel: String,
+) -> Result<String, String> {
+    fetch_episode_m3u8_core(&client, &drama_id, &ep_id, &channel).await
+}
+
+#[tauri::command]
+pub async fn search_series(
+    client: State<'_, reqwest::Client>,
+    keyword: String,
+) -> Result<Vec<SearchResult>, String> {
+    search_series_core(&client, &keyword).await
+}
+
+#[tauri::command]
+pub async fn start_download_queue(
+    app: tauri::AppHandle,
+    client: State<'_, reqwest::Client>,
+    req: DownloadQueuePayload,
+) -> Result<(), String> {
+    run_download_queue(app, client.inner().clone(), req).await
 }
