@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import EpisodePicker from '../../src/components/EpisodePicker.vue';
-import type { EpisodeInfo, SeriesMetadata } from '../../src/types';
+import type { EpisodeInfo, SeriesMetadata, StreamDetails } from '../../src/types';
 
 describe('EpisodePicker.vue', () => {
   const sampleEpisodes: EpisodeInfo[] = [
@@ -18,6 +18,25 @@ describe('EpisodePicker.vue', () => {
       { id: 'ikzy', name: '愛坤 資源 (ikzy)' },
       { id: 'hnzy', name: '紅牛 資源 (hnzy)' },
     ],
+  };
+
+  const sampleProbeMap: Record<string, StreamDetails> = {
+    ikzy: {
+      resolution: '3840x2160 (4K)',
+      bitrate: '8,500 kbps',
+      video_codec: 'HEVC / H.265',
+      audio_codec: 'E-AC-3',
+      fps: 60,
+      duration_secs: 3600,
+    },
+    hnzy: {
+      resolution: '1920x1080 (1080p)',
+      bitrate: '3,200 kbps',
+      video_codec: 'H.264 / AVC',
+      audio_codec: 'AAC',
+      fps: 30,
+      duration_secs: 2700,
+    },
   };
 
   beforeEach(() => {
@@ -290,51 +309,145 @@ describe('EpisodePicker.vue', () => {
     expect(playSpy).toHaveBeenCalled();
   });
 
-  it('renders stream details HUD with resolution and bitrate once probed', async () => {
+  it('guarantees 0-HUD video viewport with zero superimposed badges and retains standby overlay', async () => {
     const wrapper = mount(EpisodePicker, {
       props: {
         episodes: sampleEpisodes,
         selectedEpisodes: [1],
         metadata: sampleMetadata,
         selectedChannel: 'ikzy',
+        channelProbeMap: sampleProbeMap,
       },
     });
 
     await new Promise((r) => setTimeout(r, 10));
     await wrapper.vm.$nextTick();
 
+    // 0-HUD requirement: The video box must NOT contain HUD overlay badges
     const hud = wrapper.find('[data-testid="preview-hud"]');
-    expect(hud.exists()).toBe(true);
+    expect(hud.exists()).toBe(false);
 
-    const resBadge = wrapper.find('[data-testid="hud-resolution"]');
-    expect(resBadge.exists()).toBe(true);
+    const hudRes = wrapper.find('[data-testid="hud-resolution"]');
+    expect(hudRes.exists()).toBe(false);
 
-    const bitrateBadge = wrapper.find('[data-testid="hud-bitrate"]');
-    expect(bitrateBadge.exists()).toBe(true);
+    const hudBitrate = wrapper.find('[data-testid="hud-bitrate"]');
+    expect(hudBitrate.exists()).toBe(false);
+
+    // Clean standby click-to-play overlay is retained
+    const standbyOverlay = wrapper.find('[data-testid="preview-standby-overlay"]');
+    expect(standbyOverlay.exists()).toBe(true);
   });
 
-  it('reloads preview stream and details when selectedChannel changes', async () => {
+  it('renders dedicated telemetry dashboard below player controls with parameters from channelProbeMap', async () => {
     const wrapper = mount(EpisodePicker, {
       props: {
         episodes: sampleEpisodes,
         selectedEpisodes: [1],
         metadata: sampleMetadata,
         selectedChannel: 'ikzy',
+        channelProbeMap: sampleProbeMap,
       },
     });
 
     await new Promise((r) => setTimeout(r, 10));
+    await wrapper.vm.$nextTick();
 
-    // Change channel prop
+    // Telemetry dashboard card exists
+    const telemetry = wrapper.find('[data-testid="telemetry-dashboard"]');
+    expect(telemetry.exists()).toBe(true);
+
+    // Displays verified telemetry parameters matching channelProbeMap
+    const res = wrapper.find('[data-testid="telemetry-resolution"]');
+    expect(res.exists()).toBe(true);
+    expect(res.text()).toContain('3840x2160');
+
+    const bitrate = wrapper.find('[data-testid="telemetry-bitrate"]');
+    expect(bitrate.exists()).toBe(true);
+    expect(bitrate.text()).toContain('8,500 kbps');
+
+    const codecs = wrapper.find('[data-testid="telemetry-codecs"]');
+    expect(codecs.exists()).toBe(true);
+    expect(codecs.text()).toContain('HEVC');
+    expect(codecs.text()).toContain('E-AC-3');
+
+    const fpsDuration = wrapper.find('[data-testid="telemetry-fps-duration"]');
+    expect(fpsDuration.exists()).toBe(true);
+    expect(fpsDuration.text()).toContain('60 fps');
+
+    // Absolutely NO debug placeholders like "需 ffprobe"
+    expect(res.text()).not.toContain('ffprobe');
+    expect(bitrate.text()).not.toContain('ffprobe');
+    expect(codecs.text()).not.toContain('ffprobe');
+  });
+
+  it('updates telemetry dashboard immediately when selectedChannel switches', async () => {
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: 'ikzy',
+        channelProbeMap: sampleProbeMap,
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('[data-testid="telemetry-resolution"]').text()).toContain('3840x2160');
+
+    // Switch to hnzy channel
     await wrapper.setProps({
       selectedChannel: 'hnzy',
     });
-
     await new Promise((r) => setTimeout(r, 10));
     await wrapper.vm.$nextTick();
 
-    const channelIndicator = wrapper.find('[data-testid="channel-indicator"]');
-    expect(channelIndicator.attributes('title')).toBe('紅牛 資源 (hnzy)');
+    expect(wrapper.find('[data-testid="telemetry-resolution"]').text()).toContain('1080p');
+    expect(wrapper.find('[data-testid="telemetry-bitrate"]').text()).toContain('3,200 kbps');
+  });
+
+  it('refines player controls: removes download toggle button and applies dynamic gradient fill to scrubber and volume', async () => {
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: 'ikzy',
+      },
+    });
+
+    // 1. Redundant download queue toggle button must NOT exist in the player controls
+    const downloadToggleBtn = wrapper.find('[data-testid="btn-toggle-download-current"]');
+    expect(downloadToggleBtn.exists()).toBe(false);
+
+    // 2. Play/Pause and Mute buttons exist
+    const playPauseBtn = wrapper.find('[data-testid="btn-play-pause"]');
+    expect(playPauseBtn.exists()).toBe(true);
+
+    const muteBtn = wrapper.find('[data-testid="btn-mute"]');
+    expect(muteBtn.exists()).toBe(true);
+
+    // 3. Scrubber with dynamic gradient fill
+    const scrubber = wrapper.find('[data-testid="preview-scrubber"]');
+    expect(scrubber.exists()).toBe(true);
+    expect(scrubber.attributes('style')).toContain('linear-gradient');
+    expect(scrubber.attributes('style')).toContain('#8b5cf6');
+    expect(scrubber.attributes('style')).toContain('#334155');
+
+    // 4. Volume slider with dynamic gradient fill
+    const volumeSlider = wrapper.find('[data-testid="preview-volume"]');
+    expect(volumeSlider.exists()).toBe(true);
+    expect(volumeSlider.attributes('style')).toContain('linear-gradient');
+    expect(volumeSlider.attributes('style')).toContain('#8b5cf6');
+    expect(volumeSlider.attributes('style')).toContain('#334155');
+
+    // 5. Single-click Copy Stream URL button in player control bar
+    const copyBtn = wrapper.find('[data-testid="btn-copy-stream-url"]');
+    expect(copyBtn.exists()).toBe(true);
+
+    await copyBtn.trigger('click');
+    expect(copyBtn.exists()).toBe(true);
   });
 
   it('renders error overlay with retry button when playback fails and allows retrying', async () => {
@@ -350,7 +463,7 @@ describe('EpisodePicker.vue', () => {
     await new Promise((r) => setTimeout(r, 10));
     await wrapper.vm.$nextTick();
 
-    const videoEl = wrapper.find<HTMLVideoElement>('[data-testid=\"preview-video\"]').element;
+    const videoEl = wrapper.find<HTMLVideoElement>('[data-testid="preview-video"]').element;
 
     // Simulate error event on video
     Object.defineProperty(videoEl, 'error', {
@@ -366,40 +479,14 @@ describe('EpisodePicker.vue', () => {
 
     await wrapper.vm.$nextTick();
 
-    const errorOverlay = wrapper.find('[data-testid=\"preview-error-overlay\"]');
+    const errorOverlay = wrapper.find('[data-testid="preview-error-overlay"]');
     expect(errorOverlay.exists()).toBe(true);
 
-    const retryBtn = wrapper.find('[data-testid=\"btn-retry-preview\"]');
+    const retryBtn = wrapper.find('[data-testid="btn-retry-preview"]');
     expect(retryBtn.exists()).toBe(true);
-
-    const copyBtn = wrapper.find('[data-testid=\"btn-copy-stream-url\"]');
-    expect(copyBtn.exists()).toBe(true);
 
     await retryBtn.trigger('click');
     const changeEvents = wrapper.emitted('change-preview');
     expect(changeEvents).toBeTruthy();
-  });
-
-  it('provides play/pause and mute/unmute buttons, timeline scrubber, and volume slider', async () => {
-    const wrapper = mount(EpisodePicker, {
-      props: {
-        episodes: sampleEpisodes,
-        selectedEpisodes: [1],
-        metadata: sampleMetadata,
-        selectedChannel: 'ikzy',
-      },
-    });
-
-    const playPauseBtn = wrapper.find('[data-testid=\"btn-play-pause\"]');
-    expect(playPauseBtn.exists()).toBe(true);
-
-    const muteBtn = wrapper.find('[data-testid=\"btn-mute\"]');
-    expect(muteBtn.exists()).toBe(true);
-
-    const scrubber = wrapper.find('[data-testid=\"timeline-scrubber\"]');
-    expect(scrubber.exists()).toBe(true);
-
-    const volumeSlider = wrapper.find('[data-testid=\"volume-slider\"]');
-    expect(volumeSlider.exists()).toBe(true);
   });
 });
