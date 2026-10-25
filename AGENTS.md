@@ -15,6 +15,7 @@
 - **Dependencies**: If `node_modules` or CLI tools (`vue-tsc`) are missing, run `npm run setup` first.
 - **Lockfile Sync**: Always keep `package-lock.json` in sync with `package.json` (`npm run check:lockfile`). Modifying `package.json` without updating the lockfile fails pre-commit and CI.
 - **Theme & UI Guardrails**: Native `<select>` and `<option>` elements require `color-scheme: dark` and dark background classes (`bg-slate-900 text-slate-100`). Avoid verbose `例如：` prefixes in input placeholders (`npm run check:theme`).
+- **Domain & Architecture Guardrails**: Use canonical terminology from `GLOSSARY.md` (e.g. `頻道` over `線路`, `episode` over `ep`). Do not hardcode scraping site URLs or referers in frontend code; route through backend `SiteExtractor` (`npm run check:domain`).
 - **Branch Lock**: If git checkout fails due to a stale worktree lock, run `npm run worktree:prune` or `git worktree remove --force <path>`.
 
 ## Development & Testing Rules
@@ -36,3 +37,5 @@ Default five-role triage vocabulary. See `docs/agents/triage-labels.md`.
 ### Domain docs
 
 Single-context layout (`GLOSSARY.md` + `docs/adr/`). See `docs/agents/domain.md`.
+- **Domain Glossary**: Consult `GLOSSARY.md` for canonical terms before creating interfaces or user-facing copy.
+- **Architecture Decisions**: Consult `docs/adr/` before altering module seams or extractor designs.

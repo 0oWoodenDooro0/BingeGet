@@ -18,11 +18,11 @@ const emit = defineEmits<{
       <div class="flex items-center gap-2">
         <Radio class="h-4 w-4 text-indigo-400" />
         <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          播放線路
+          播放頻道
         </span>
       </div>
       <span class="text-xs text-slate-400">
-        共 {{ channels.length }} 個線路
+        共 {{ channels.length }} 個頻道
       </span>
     </div>
 

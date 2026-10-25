@@ -130,9 +130,9 @@ export function useSeriesMetadata() {
           title: `${kw} (示範影集)`,
           year: '2024',
           category: '韓劇',
-          url: 'https://chinaq.fun/tv-kr/202639642/',
-          source_id: 'chinaq',
-          source_name: 'ChinaQ',
+          url: 'https://example.com/drama/sample/',
+          source_id: 'sample',
+          source_name: 'SampleSource',
         },
       ];
     }
