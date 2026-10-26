@@ -296,8 +296,11 @@ fn test_detect_system_environment() {
     assert!(env.gstreamer_ready.is_some());
 }
 
+static QUEUE_TEST_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[tokio::test]
 async fn test_cancel_download_task_ipc_command() {
+    let _lock = QUEUE_TEST_MUTEX.lock().await;
     let queue = bingeget::engine::queue::global_task_queue();
     {
         let mut q = queue.lock().await;
@@ -323,6 +326,7 @@ async fn test_cancel_download_task_ipc_command() {
 
 #[tokio::test]
 async fn test_retry_download_task_ipc_command() {
+    let _lock = QUEUE_TEST_MUTEX.lock().await;
     let queue = bingeget::engine::queue::global_task_queue();
     {
         let mut q = queue.lock().await;
