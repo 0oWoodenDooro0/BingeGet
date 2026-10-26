@@ -2,8 +2,10 @@ use std::path::Path;
 use tauri::State;
 
 use crate::engine::probe::probe_stream_core;
-use crate::engine::queue::run_download_queue;
-pub use crate::engine::queue::start_download_queue_core;
+pub use crate::engine::queue::{
+    cancel_download_task_core, retry_download_task_core, run_download_queue,
+    start_download_queue_core,
+};
 use crate::extractors::{global_catalog, Catalog, ExtractorRegistry};
 use crate::models::{
     DownloadQueuePayload, PreviewStreamInfo, SearchResult, SeriesMetadata, StreamDetails,
@@ -188,4 +190,14 @@ pub async fn start_download_queue(
     req: DownloadQueuePayload,
 ) -> Result<(), String> {
     run_download_queue(app, client.inner().clone(), req).await
+}
+
+#[tauri::command]
+pub async fn cancel_download_task(episode: u32) -> Result<(), String> {
+    cancel_download_task_core(episode).await
+}
+
+#[tauri::command]
+pub async fn retry_download_task(episode: u32) -> Result<(), String> {
+    retry_download_task_core(episode).await
 }

@@ -223,7 +223,7 @@ export function useDownloadQueue(options: UseDownloadQueueOptions = {}) {
     }
   };
 
-  const retryDownload = (episodeNumber: number) => {
+  const retryDownload = async (episodeNumber: number): Promise<void> => {
     const item = queue.value.find(q => q.spec.episode === episodeNumber);
     if (item) {
       item.state = { type: 'Queued' };
@@ -231,12 +231,30 @@ export function useDownloadQueue(options: UseDownloadQueueOptions = {}) {
         item.progress.percent = 0;
       }
     }
+
+    if (isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('retry_download_task', { episode: episodeNumber });
+      } catch (err: unknown) {
+        console.warn('retry_download_task error:', getErrorMessage(err));
+      }
+    }
   };
 
-  const cancelDownload = (episodeNumber: number) => {
+  const cancelDownload = async (episodeNumber: number): Promise<void> => {
     const item = queue.value.find(q => q.spec.episode === episodeNumber);
     if (item) {
       item.state = { type: 'Cancelled' };
+    }
+
+    if (isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('cancel_download_task', { episode: episodeNumber });
+      } catch (err: unknown) {
+        console.warn('cancel_download_task error:', getErrorMessage(err));
+      }
     }
   };
 

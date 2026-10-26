@@ -295,3 +295,53 @@ fn test_detect_system_environment() {
     #[cfg(target_os = "linux")]
     assert!(env.gstreamer_ready.is_some());
 }
+
+#[tokio::test]
+async fn test_cancel_download_task_ipc_command() {
+    let queue = bingeget::engine::queue::global_task_queue();
+    {
+        let mut q = queue.lock().await;
+        q.clear();
+        q.enqueue(bingeget::engine::downloader::DownloadTaskSpec {
+            m3u8_url: "https://example.com/ep10.m3u8".to_string(),
+            custom_title: "繁花".to_string(),
+            season: 1,
+            episode: 10,
+            save_dir: "/tmp".to_string(),
+            referer: "".to_string(),
+        });
+        q.set_task_state(10, bingeget::engine::queue::QueueTaskState::Downloading);
+    }
+
+    let res = bingeget::commands::cancel_download_task_core(10).await;
+    assert!(res.is_ok());
+
+    let q = queue.lock().await;
+    let task = q.get_task(10).expect("Task 10 must exist");
+    assert_eq!(task.state, bingeget::engine::queue::QueueTaskState::Cancelled);
+}
+
+#[tokio::test]
+async fn test_retry_download_task_ipc_command() {
+    let queue = bingeget::engine::queue::global_task_queue();
+    {
+        let mut q = queue.lock().await;
+        q.clear();
+        q.enqueue(bingeget::engine::downloader::DownloadTaskSpec {
+            m3u8_url: "https://example.com/ep11.m3u8".to_string(),
+            custom_title: "繁花".to_string(),
+            season: 1,
+            episode: 11,
+            save_dir: "/tmp".to_string(),
+            referer: "".to_string(),
+        });
+        q.set_task_state(11, bingeget::engine::queue::QueueTaskState::Cancelled);
+    }
+
+    let res = bingeget::commands::retry_download_task_core(11).await;
+    assert!(res.is_ok());
+
+    let q = queue.lock().await;
+    let task = q.get_task(11).expect("Task 11 must exist");
+    assert_eq!(task.state, bingeget::engine::queue::QueueTaskState::Queued);
+}
