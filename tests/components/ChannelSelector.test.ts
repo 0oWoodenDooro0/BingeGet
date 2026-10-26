@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ChannelSelector from '../../src/components/ChannelSelector.vue';
 import type { ChannelOption } from '../../src/types';
+import { useSeriesSession } from '../../src/composables/useSeriesSession';
 
 describe('ChannelSelector.vue', () => {
   const sampleChannels: ChannelOption[] = [
@@ -68,5 +69,30 @@ describe('ChannelSelector.vue', () => {
 
     expect(wrapper.find('[data-testid="channel-quality-priority-badge"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="channel-sort-subtitle"]').exists()).toBe(false);
+  });
+
+  it('binds directly to SeriesSession workspace and updates selectedChannel on click', async () => {
+    const session = useSeriesSession();
+    session.metadata.value = {
+      drama_id: '999',
+      channels: sampleChannels,
+      episodes: [],
+    };
+    session.selectChannel('ikzy');
+
+    const wrapper = mount(ChannelSelector, {
+      props: {
+        session,
+      },
+    });
+
+    const options = wrapper.findAll('[data-testid="channel-item"]');
+    expect(options.length).toBe(3);
+
+    const hnzyBtn = wrapper.find('[data-channel-id="hnzy"]');
+    await hnzyBtn.trigger('click');
+
+    expect(session.selectedChannel.value).toBe('hnzy');
+    expect(hnzyBtn.classes()).toContain('border-indigo-500');
   });
 });

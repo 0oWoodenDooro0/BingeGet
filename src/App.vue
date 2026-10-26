@@ -9,28 +9,21 @@ import EpisodePicker from './components/EpisodePicker.vue';
 import DownloadQueue from './components/DownloadQueue.vue';
 import {
   useSystemEnvironment,
-  useSeriesMetadata,
+  useSeriesSession,
   useDownloadQueue,
   getErrorMessage,
 } from './composables';
-import type { SeriesConfigModel, SearchResult, StreamDetails } from './types';
+import type { SeriesConfigModel, SearchResult } from './types';
 
 const loading = ref(false);
 const errorMsg = ref('');
 const successMsg = ref('');
-const channelProbeMap = ref<Record<string, StreamDetails>>({});
 
 // System environment detection composable
 const { envInfo } = useSystemEnvironment();
 
-// Series metadata & channel/episode selection composable
-const {
-  metadata,
-  selectedChannel,
-  selectedEpisodes,
-  parseUrl,
-  searchSeries,
-} = useSeriesMetadata();
+// Unified Series Session workspace composable (eliminates prop-drilling of channelProbeMap & @probe-complete bubbling)
+const session = useSeriesSession();
 
 // User inputs model (bundled to avoid data clumps)
 const config = ref<SeriesConfigModel>(
@@ -56,10 +49,9 @@ const handleParse = async (url: string) => {
   loading.value = true;
   errorMsg.value = '';
   successMsg.value = '';
-  channelProbeMap.value = {};
 
   try {
-    const data = await parseUrl(url);
+    const data = await session.parseUrl(url);
     successMsg.value = `解析成功，共 ${data.episodes.length} 集。請確認劇名與集數後即可開始下載。`;
   } catch (err: unknown) {
     errorMsg.value = `解析失敗: ${getErrorMessage(err)}`;
@@ -83,7 +75,7 @@ const startDownload = async () => {
     return;
   }
 
-  if (selectedEpisodes.value.length === 0) {
+  if (session.selectedEpisodes.value.length === 0) {
     errorMsg.value = '請至少選擇一集！';
     return;
   }
@@ -91,11 +83,11 @@ const startDownload = async () => {
   errorMsg.value = '';
 
   try {
-    if (!metadata.value) return;
+    if (!session.metadata.value) return;
     await triggerStartDownload({
-      metadata: metadata.value,
-      selectedEpisodes: selectedEpisodes.value,
-      selectedChannel: selectedChannel.value,
+      metadata: session.metadata.value,
+      selectedEpisodes: session.selectedEpisodes.value,
+      selectedChannel: session.selectedChannel.value,
       config: config.value,
     });
   } catch (err: unknown) {
@@ -165,33 +157,25 @@ const handleCancel = (ep: number) => {
       <!-- URL & Search Input Bar -->
       <UrlBar
         :loading="loading"
-        :on-search="searchSeries"
+        :on-search="session.searchSeries"
         @parse="handleParse"
         @select-result="handleSelectResult"
       />
 
       <!-- Metadata & Configuration Section -->
-      <template v-if="metadata">
+      <template v-if="session.metadata.value">
         <SeriesConfig
           v-model:config="config"
-          :totalEpisodes="metadata.episodes.length"
-          :coverUrl="metadata.cover_url"
+          :totalEpisodes="session.metadata.value.episodes.length"
+          :coverUrl="session.metadata.value.cover_url"
         />
 
         <ChannelSelector
-          :channels="metadata.channels"
-          v-model:selectedChannel="selectedChannel"
-          :probeMap="channelProbeMap"
+          :session="session"
         />
 
         <EpisodePicker
-          :episodes="metadata.episodes"
-          v-model:selectedEpisodes="selectedEpisodes"
-          :drama-id="metadata.drama_id"
-          :metadata="metadata"
-          :selected-channel="selectedChannel"
-          :channel-probe-map="channelProbeMap"
-          @probe-complete="({ channel, details }) => { channelProbeMap[channel] = details; }"
+          :session="session"
         />
 
         <!-- Primary Action -->
@@ -199,11 +183,11 @@ const handleCancel = (ep: number) => {
           <button
             type="button"
             @click="startDownload"
-            :disabled="selectedEpisodes.length === 0 || !config.customTitle.trim()"
+            :disabled="session.selectedEpisodes.value.length === 0 || !config.customTitle.trim()"
             class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-8 py-3.5 text-base font-semibold text-white shadow-xl shadow-indigo-600/25 transition-all hover:from-indigo-500 hover:to-violet-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download class="h-5 w-5" />
-            <span>開始下載 (已選 {{ selectedEpisodes.length }} 集)</span>
+            <span>開始下載 (已選 {{ session.selectedEpisodes.value.length }} 集)</span>
           </button>
         </div>
       </template>

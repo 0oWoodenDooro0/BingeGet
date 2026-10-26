@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils';
 import EpisodePicker from '../../src/components/EpisodePicker.vue';
 import type { EpisodeInfo, SeriesMetadata, StreamDetails } from '../../src/types';
 import * as episodePreviewComposable from '../../src/composables/useEpisodePreview';
+import { useSeriesSession } from '../../src/composables/useSeriesSession';
 import { ref } from 'vue';
 
 describe('EpisodePicker.vue', () => {
@@ -13,6 +14,7 @@ describe('EpisodePicker.vue', () => {
   ];
 
   const sampleMetadata: SeriesMetadata = {
+    drama_id: 'fan-hua',
     title: '繁花',
     total_episodes: 30,
     cover_url: 'https://chinaq.fun/img/fan-hua.jpg',
@@ -20,6 +22,7 @@ describe('EpisodePicker.vue', () => {
       { id: 'ikzy', name: '愛坤 資源 (ikzy)' },
       { id: 'hnzy', name: '紅牛 資源 (hnzy)' },
     ],
+    episodes: sampleEpisodes,
   };
 
   const sampleProbeMap: Record<string, StreamDetails> = {
@@ -636,9 +639,10 @@ describe('EpisodePicker.vue', () => {
     const badge = wrapper.find('[data-testid="telemetry-status-badge"]');
     expect(badge.attributes('data-probed')).toBe('true');
   });
-  it("disables copy stream button and does not trigger copied feedback when currentStreamSource is empty", async () => {
+
+  it('disables copy stream button and does not trigger copied feedback when currentStreamSource is empty', async () => {
     const writeTextSpy = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
+    Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: writeTextSpy },
       configurable: true,
       writable: true,
@@ -656,34 +660,35 @@ describe('EpisodePicker.vue', () => {
         episodes: sampleEpisodes,
         selectedEpisodes: [1],
         metadata: sampleMetadata,
-        selectedChannel: "ikzy",
+        selectedChannel: 'ikzy',
       },
     });
 
-    const copyBtn = wrapper.find("[data-testid=\"btn-copy-stream-url\"]");
+    const copyBtn = wrapper.find('[data-testid="btn-copy-stream-url"]');
     expect(copyBtn.exists()).toBe(true);
-    expect(copyBtn.attributes("disabled")).toBeDefined();
-    expect(copyBtn.classes()).toContain("disabled:opacity-50");
-    expect(copyBtn.classes()).toContain("disabled:cursor-not-allowed");
+    expect(copyBtn.attributes('disabled')).toBeDefined();
+    expect(copyBtn.classes()).toContain('disabled:opacity-50');
+    expect(copyBtn.classes()).toContain('disabled:cursor-not-allowed');
 
-    await copyBtn.trigger("click");
+    await copyBtn.trigger('click');
     await wrapper.vm.$nextTick();
 
     expect(writeTextSpy).not.toHaveBeenCalled();
-    expect(copyBtn.find(".text-emerald-400").exists()).toBe(false);
+    expect(copyBtn.find('.text-emerald-400').exists()).toBe(false);
   });
-  it("enables copy stream button and triggers copied feedback when currentStreamSource is present and clipboard succeeds", async () => {
+
+  it('enables copy stream button and triggers copied feedback when currentStreamSource is present and clipboard succeeds', async () => {
     const writeTextSpy = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
+    Object.defineProperty(navigator, 'clipboard', {
       value: { writeText: writeTextSpy },
       configurable: true,
       writable: true,
     });
 
     const previewState = episodePreviewComposable.useEpisodePreview();
-    vi.spyOn(episodePreviewComposable, "useEpisodePreview").mockReturnValue({
+    vi.spyOn(episodePreviewComposable, 'useEpisodePreview').mockReturnValue({
       ...previewState,
-      currentStreamSource: ref("https://stream.example/live.m3u8"),
+      currentStreamSource: ref('https://stream.example/live.m3u8'),
       loadPreview: vi.fn(),
     });
 
@@ -692,18 +697,54 @@ describe('EpisodePicker.vue', () => {
         episodes: sampleEpisodes,
         selectedEpisodes: [1],
         metadata: sampleMetadata,
-        selectedChannel: "ikzy",
+        selectedChannel: 'ikzy',
       },
     });
 
-    const copyBtn = wrapper.find("[data-testid=\"btn-copy-stream-url\"]");
+    const copyBtn = wrapper.find('[data-testid="btn-copy-stream-url"]');
     expect(copyBtn.exists()).toBe(true);
-    expect(copyBtn.attributes("disabled")).toBeUndefined();
+    expect(copyBtn.attributes('disabled')).toBeUndefined();
 
-    await copyBtn.trigger("click");
+    await copyBtn.trigger('click');
     await wrapper.vm.$nextTick();
 
-    expect(writeTextSpy).toHaveBeenCalledWith("https://stream.example/live.m3u8");
-    expect(copyBtn.find(".text-emerald-400").exists()).toBe(true);
+    expect(writeTextSpy).toHaveBeenCalledWith('https://stream.example/live.m3u8');
+    expect(copyBtn.find('.text-emerald-400').exists()).toBe(true);
+  });
+
+  it('binds directly to SeriesSession workspace: eliminates prop-drilling of channelProbeMap and bubbling of probe-complete', async () => {
+    const session = useSeriesSession();
+    session.metadata.value = sampleMetadata;
+    session.selectedChannel.value = 'ikzy';
+    session.selectedEpisodes.value = [1];
+    session.setCachedProbe('ikzy', sampleProbeMap.ikzy);
+
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        session,
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+    await wrapper.vm.$nextTick();
+
+    // Renders episodes from session
+    const epItems = wrapper.findAll('[data-testid="episode-item"]');
+    expect(epItems.length).toBe(sampleEpisodes.length);
+
+    // Displays telemetry directly from session cache without channelProbeMap prop
+    const res = wrapper.find('[data-testid="telemetry-resolution"]');
+    expect(res.text()).toContain('3840x2160');
+
+    // Toggling episode updates session.selectedEpisodes directly
+    const ep2Checkbox = wrapper.find('[data-episode-checkbox="2"]');
+    await ep2Checkbox.trigger('click');
+    expect(session.selectedEpisodes.value).toContain(2);
+
+    // Switching preview calls session.loadPreview
+    const loadPreviewSpy = vi.spyOn(session, 'loadPreview').mockResolvedValue(undefined);
+    const ep2PreviewBtn = wrapper.find('[data-episode-preview="2"]');
+    await ep2PreviewBtn.trigger('click');
+    expect(loadPreviewSpy).toHaveBeenCalledWith(2, 'ikzy');
   });
 });

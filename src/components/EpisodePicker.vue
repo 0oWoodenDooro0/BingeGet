@@ -16,21 +16,26 @@ import {
 } from 'lucide-vue-next';
 import type { EpisodeInfo, SeriesMetadata, StreamDetails } from '../types';
 import { useEpisodePreview } from '../composables/useEpisodePreview';
+import type { SeriesSession } from '../composables/useSeriesSession';
 
 const props = withDefaults(
   defineProps<{
-    episodes: EpisodeInfo[];
-    selectedEpisodes: number[];
+    episodes?: EpisodeInfo[];
+    selectedEpisodes?: number[];
     dramaId?: string;
     metadata?: SeriesMetadata | null;
     selectedChannel?: string;
     channelProbeMap?: Record<string, StreamDetails>;
+    session?: SeriesSession;
   }>(),
   {
+    episodes: () => [],
+    selectedEpisodes: () => [],
     dramaId: '',
     metadata: null,
     selectedChannel: '',
     channelProbeMap: () => ({}),
+    session: undefined,
   }
 );
 
@@ -45,40 +50,140 @@ const rangeStart = ref(1);
 const rangeEnd = ref(10);
 const copiedStreamUrl = ref(false);
 
+const effectiveEpisodes = computed<EpisodeInfo[]>(() => {
+  if (props.session?.metadata?.value?.episodes) {
+    return props.session.metadata.value.episodes;
+  }
+  return props.episodes || [];
+});
+
+const effectiveSelectedEpisodes = computed<number[]>(() => {
+  if (props.session) {
+    return props.session.selectedEpisodes.value;
+  }
+  return props.selectedEpisodes || [];
+});
+
+const effectiveMetadata = computed<SeriesMetadata | null>(() => {
+  if (props.session?.metadata?.value) {
+    return props.session.metadata.value;
+  }
+  return props.metadata ?? null;
+});
+
+const effectiveSelectedChannel = computed<string>(() => {
+  if (props.session) {
+    return props.session.selectedChannel.value;
+  }
+  return props.selectedChannel || '';
+});
+
 const currentDramaId = computed(() => {
-  return props.dramaId || props.metadata?.drama_id || '';
+  return props.dramaId || effectiveMetadata.value?.drama_id || '';
 });
 
 const currentChannelName = computed(() => {
-  if (!props.selectedChannel) return '預設頻道';
-  const found = props.metadata?.channels?.find(c => c.id === props.selectedChannel);
-  return found ? found.name : props.selectedChannel;
+  const ch = effectiveSelectedChannel.value;
+  if (!ch) return '預設頻道';
+  const found = effectiveMetadata.value?.channels?.find(c => c.id === ch);
+  return found ? found.name : ch;
 });
 
-const {
-  activePreviewEp,
-  streamDetails,
-  currentStreamSource,
-  loading: loadingStream,
-  error: streamError,
-  isPlaying,
-  isMuted,
-  currentTime,
-  duration,
-  volume,
-  bindVideoElement,
-  loadPreview,
-  togglePlay,
-  toggleMute,
-  seekTo,
-  setVolume,
-  cleanup,
-} = useEpisodePreview({ autoPlay: false });
+// Fallback preview composable when session is not provided directly
+const fallbackPreview = useEpisodePreview({ autoPlay: false });
+
+const activePreviewEp = computed<number>(() => {
+  return props.session ? props.session.activePreviewEp.value : fallbackPreview.activePreviewEp.value;
+});
+
+const streamDetails = computed<StreamDetails | null>(() => {
+  return props.session ? props.session.streamDetails.value : fallbackPreview.streamDetails.value;
+});
+
+const currentStreamSource = computed<string>(() => {
+  return props.session ? props.session.currentStreamSource.value : fallbackPreview.currentStreamSource.value;
+});
+
+const loadingStream = computed<boolean>(() => {
+  return props.session ? props.session.loadingStream.value : fallbackPreview.loading.value;
+});
+
+const streamError = computed<string>(() => {
+  return props.session ? props.session.streamError.value : fallbackPreview.error.value;
+});
+
+const isPlaying = computed<boolean>(() => {
+  return props.session ? props.session.isPlaying.value : fallbackPreview.isPlaying.value;
+});
+
+const isMuted = computed<boolean>(() => {
+  return props.session ? props.session.isMuted.value : fallbackPreview.isMuted.value;
+});
+
+const currentTime = computed<number>(() => {
+  return props.session ? props.session.currentTime.value : fallbackPreview.currentTime.value;
+});
+
+const duration = computed<number>(() => {
+  return props.session ? props.session.duration.value : fallbackPreview.duration.value;
+});
+
+const volume = computed<number>(() => {
+  return props.session ? props.session.volume.value : fallbackPreview.volume.value;
+});
+
+const bindVideoElement = (el: HTMLVideoElement | null) => {
+  if (props.session) {
+    props.session.bindVideoElement(el);
+  } else {
+    fallbackPreview.bindVideoElement(el);
+  }
+};
+
+const togglePlay = () => {
+  if (props.session) {
+    props.session.togglePlay();
+  } else {
+    fallbackPreview.togglePlay();
+  }
+};
+
+const toggleMute = () => {
+  if (props.session) {
+    props.session.toggleMute();
+  } else {
+    fallbackPreview.toggleMute();
+  }
+};
+
+const seekTo = (seconds: number) => {
+  if (props.session) {
+    props.session.seekTo(seconds);
+  } else {
+    fallbackPreview.seekTo(seconds);
+  }
+};
+
+const setVolume = (val: number) => {
+  if (props.session) {
+    props.session.setVolume(val);
+  } else {
+    fallbackPreview.setVolume(val);
+  }
+};
+
+const cleanup = () => {
+  if (props.session) {
+    props.session.cleanup();
+  } else {
+    fallbackPreview.cleanup();
+  }
+};
 
 // Emit probe-complete when streamDetails updates for the active channel
 watch(streamDetails, (newDetails) => {
-  if (newDetails && props.selectedChannel) {
-    emit('probe-complete', { channel: props.selectedChannel, details: newDetails });
+  if (newDetails && effectiveSelectedChannel.value) {
+    emit('probe-complete', { channel: effectiveSelectedChannel.value, details: newDetails });
   }
 });
 
@@ -99,9 +204,21 @@ const volumeStyle = computed(() => {
 });
 
 const rawProbeData = computed(() => {
+  // If session is provided, use session.currentChannelProbe or session.channelProbeMap
+  if (props.session) {
+    const ch = props.session.selectedChannel.value;
+    if (ch && props.session.channelProbeMap.value[ch]) {
+      return props.session.channelProbeMap.value[ch];
+    }
+    if (props.session.streamDetails.value) {
+      return props.session.streamDetails.value;
+    }
+    return null;
+  }
   // Prefer channel probe map if available for current channel
-  if (props.selectedChannel && props.channelProbeMap?.[props.selectedChannel]) {
-    return props.channelProbeMap[props.selectedChannel];
+  const ch = effectiveSelectedChannel.value;
+  if (ch && props.channelProbeMap?.[ch]) {
+    return props.channelProbeMap[ch];
   }
   // Fall back to active preview streamDetails
   if (streamDetails.value) {
@@ -207,8 +324,8 @@ onMounted(() => {
     bindVideoElement(videoRef.value);
   }
   // Initialize preview with the first episode
-  if (props.episodes.length > 0) {
-    const firstEp = props.episodes[0];
+  if (effectiveEpisodes.value.length > 0) {
+    const firstEp = effectiveEpisodes.value[0];
     switchPreview(firstEp.ep_number);
   }
 });
@@ -226,21 +343,41 @@ watch(videoRef, (newEl) => {
 
 // Trigger preview for a specific episode directly without middleman
 const switchPreview = (epNum: number) => {
-  const ep = props.episodes.find(e => e.ep_number === epNum);
+  const ep = effectiveEpisodes.value.find(e => e.ep_number === epNum);
   if (!ep) return;
 
   emit('change-preview', epNum);
-  loadPreview(currentDramaId.value, ep.ep_id, epNum, props.selectedChannel, props.metadata?.source_id);
+  if (props.session) {
+    props.session.loadPreview(epNum, effectiveSelectedChannel.value);
+  } else {
+    fallbackPreview.loadPreview(
+      currentDramaId.value,
+      ep.ep_id,
+      epNum,
+      effectiveSelectedChannel.value,
+      effectiveMetadata.value?.source_id
+    );
+  }
 };
 
 // Reload preview if user switches Channel in ChannelSelector
 watch(
-  () => props.selectedChannel,
+  effectiveSelectedChannel,
   (newChannel, oldChannel) => {
     if (newChannel && newChannel !== oldChannel && activePreviewEp.value) {
-      const ep = props.episodes.find(e => e.ep_number === activePreviewEp.value);
+      const ep = effectiveEpisodes.value.find(e => e.ep_number === activePreviewEp.value);
       if (ep) {
-        loadPreview(currentDramaId.value, ep.ep_id, activePreviewEp.value, newChannel, props.metadata?.source_id);
+        if (props.session) {
+          props.session.loadPreview(activePreviewEp.value, newChannel);
+        } else {
+          fallbackPreview.loadPreview(
+            currentDramaId.value,
+            ep.ep_id,
+            activePreviewEp.value,
+            newChannel,
+            effectiveMetadata.value?.source_id
+          );
+        }
       }
     }
   }
@@ -248,7 +385,7 @@ watch(
 
 // Watch episodes list changes
 watch(
-  () => props.episodes,
+  effectiveEpisodes,
   (newEps) => {
     if (newEps.length > 0) {
       if (!newEps.some(e => e.ep_number === activePreviewEp.value)) {
@@ -260,7 +397,10 @@ watch(
 
 // Toggle download selection (Decoupled from preview)
 const toggleEpisode = (epNum: number) => {
-  const current = [...props.selectedEpisodes];
+  if (props.session) {
+    props.session.toggleEpisode(epNum);
+  }
+  const current = [...effectiveSelectedEpisodes.value];
   const idx = current.indexOf(epNum);
   if (idx >= 0) {
     current.splice(idx, 1);
@@ -272,21 +412,33 @@ const toggleEpisode = (epNum: number) => {
 
 // Batch Selection Toolbar handlers
 const selectAll = () => {
-  emit('update:selectedEpisodes', props.episodes.map(e => e.ep_number));
+  if (props.session) {
+    props.session.selectAllEpisodes();
+  }
+  emit('update:selectedEpisodes', effectiveEpisodes.value.map(e => e.ep_number));
 };
 
 const clearAll = () => {
+  if (props.session) {
+    props.session.clearSelectedEpisodes();
+  }
   emit('update:selectedEpisodes', []);
 };
 
 const selectFirstN = (n: number) => {
-  emit('update:selectedEpisodes', props.episodes.slice(0, n).map(e => e.ep_number));
+  if (props.session) {
+    props.session.selectFirstNEpisodes(n);
+  }
+  emit('update:selectedEpisodes', effectiveEpisodes.value.slice(0, n).map(e => e.ep_number));
 };
 
 const applyRange = () => {
   const start = Math.min(rangeStart.value, rangeEnd.value);
   const end = Math.max(rangeStart.value, rangeEnd.value);
-  const inRange = props.episodes
+  if (props.session) {
+    props.session.selectEpisodeRange(start, end);
+  }
+  const inRange = effectiveEpisodes.value
     .filter(e => e.ep_number >= start && e.ep_number <= end)
     .map(e => e.ep_number);
   emit('update:selectedEpisodes', inRange);
@@ -294,7 +446,7 @@ const applyRange = () => {
 </script>
 
 <template>
-  <div v-if="episodes.length > 0" class="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-4">
+  <div v-if="effectiveEpisodes.length > 0" class="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-4">
     <!-- 2-Column Responsive Workspace Layout: 7:5 Cinema Master Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       <!-- Left Column: Episode Picker Matrix Grid (7 Columns Deck) -->
@@ -303,7 +455,7 @@ const applyRange = () => {
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
           <div class="flex items-center gap-2">
             <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              集數選擇 (已選 {{ selectedEpisodes.length }} / {{ episodes.length }} 集)
+              集數選擇 (已選 {{ effectiveSelectedEpisodes.length }} / {{ effectiveEpisodes.length }} 集)
             </span>
           </div>
 
@@ -374,7 +526,7 @@ const applyRange = () => {
 
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
           <div
-            v-for="ep in episodes"
+            v-for="ep in effectiveEpisodes"
             :key="ep.ep_number"
             data-testid="episode-item"
             :data-episode-number="ep.ep_number"
@@ -383,7 +535,7 @@ const applyRange = () => {
               'group flex items-center justify-between rounded-lg border p-2 text-xs select-none transition-all cursor-pointer',
               activePreviewEp === ep.ep_number
                 ? 'border-violet-500 bg-violet-950/40 text-violet-100 ring-2 ring-violet-500/50 shadow-md shadow-violet-950/50'
-                : selectedEpisodes.includes(ep.ep_number)
+                : effectiveSelectedEpisodes.includes(ep.ep_number)
                   ? 'border-indigo-500/60 bg-indigo-950/20 text-slate-200 hover:border-indigo-400'
                   : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:border-slate-700 hover:text-slate-200'
             ]"
@@ -393,17 +545,17 @@ const applyRange = () => {
               type="button"
               data-testid="episode-checkbox"
               :data-episode-checkbox="ep.ep_number"
-              :data-checked="selectedEpisodes.includes(ep.ep_number)"
+              :data-checked="effectiveSelectedEpisodes.includes(ep.ep_number)"
               :aria-label="'勾選第 ' + ep.ep_number + ' 集'"
               @click.stop="toggleEpisode(ep.ep_number)"
               :class="[
                 'flex items-center justify-center rounded p-1 transition-colors shrink-0',
-                selectedEpisodes.includes(ep.ep_number)
+                effectiveSelectedEpisodes.includes(ep.ep_number)
                   ? 'text-indigo-400 hover:text-indigo-300'
                   : 'text-slate-500 hover:text-slate-400'
               ]"
             >
-              <CheckSquare v-if="selectedEpisodes.includes(ep.ep_number)" class="h-4 w-4" />
+              <CheckSquare v-if="effectiveSelectedEpisodes.includes(ep.ep_number)" class="h-4 w-4" />
               <Square v-else class="h-4 w-4" />
             </button>
 
@@ -468,7 +620,7 @@ const applyRange = () => {
             ref="videoRef"
             data-testid="preview-video"
             class="h-full w-full object-contain"
-            :poster="metadata?.cover_url ?? undefined"
+            :poster="effectiveMetadata?.cover_url ?? undefined"
             playsinline
             muted
           ></video>
@@ -550,7 +702,7 @@ const applyRange = () => {
           </span>
         </div>
 
-        <!-- Video Player Controls & Quick Actions (Zero redundant download buttons) -->
+        <!-- Video Player Controls & Quick Actions -->
         <div class="flex items-center justify-between gap-2 text-xs">
           <!-- Player Controls -->
           <div class="flex items-center gap-2">
