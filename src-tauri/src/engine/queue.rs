@@ -9,7 +9,7 @@ use crate::commands::fetch_episode_m3u8_core;
 use crate::engine::downloader::{
     build_download_args, parse_progress_line, DownloadConfig, DownloadProgress, DownloadTaskSpec,
 };
-use crate::extractors::chinaq::ChinaQExtractor;
+use crate::extractors::global_registry;
 use crate::models::{DownloadQueuePayload, EpisodeStatusPayload, ProgressPayload};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -148,8 +148,12 @@ pub async fn run_download_queue(
     let threads = req.threads;
     let binary_path = req.binary_path;
     let category_slug = req.category_slug.unwrap_or_else(|| "tv-cn".to_string());
+    let source_id = req.source_id.unwrap_or_else(|| "chinaq".to_string());
 
-    let extractor = ChinaQExtractor::new();
+    let registry = global_registry();
+    let extractor = registry
+        .get_by_source_id(&source_id)
+        .ok_or_else(|| format!("Extractor not found for source: {}", source_id))?;
 
     for ep in req.episodes {
         let app = app.clone();
@@ -162,7 +166,9 @@ pub async fn run_download_queue(
         let save_dir = save_dir.clone();
         let binary_path = binary_path.clone();
         let category_slug = category_slug.clone();
-        let referer = extractor.build_episode_referer(&category_slug, &drama_id, &format!("ep{}", ep));
+        let source_id = source_id.clone();
+        let ep_str = format!("ep{}", ep);
+        let referer = extractor.build_stream_referer(&drama_id, &ep_str, &channel_id, Some(&category_slug));
 
         tokio::spawn(async move {
             let _permit = match sem.acquire().await {
@@ -178,7 +184,7 @@ pub async fn run_download_queue(
             });
 
             // 1. Fetch live m3u8 URL for this episode
-            let m3u8_url = match fetch_episode_m3u8_core(&client, &drama_id, &ep_id, &channel_id).await {
+            let m3u8_url = match fetch_episode_m3u8_core(&client, &drama_id, &ep_id, &channel_id, Some(&source_id)).await {
                 Ok(url) => url,
                 Err(e) => {
                     let _ = app.emit("download-status", EpisodeStatusPayload {
@@ -266,28 +272,30 @@ pub async fn run_download_queue(
                 }
             }
 
-            match child.wait().await {
-                Ok(status) if status.success() => {
-                    let _ = app.emit("download-status", EpisodeStatusPayload {
-                        episode: ep,
-                        status: "Completed".to_string(),
-                        error: None,
-                    });
-                }
-                Ok(status) => {
-                    let _ = app.emit("download-status", EpisodeStatusPayload {
-                        episode: ep,
-                        status: "Failed".to_string(),
-                        error: Some(format!("Exited with status: {}", status)),
-                    });
-                }
+            let status = match child.wait().await {
+                Ok(s) => s,
                 Err(e) => {
                     let _ = app.emit("download-status", EpisodeStatusPayload {
                         episode: ep,
                         status: "Failed".to_string(),
-                        error: Some(format!("Wait failed: {}", e)),
+                        error: Some(format!("Failed waiting for process: {}", e)),
                     });
+                    return;
                 }
+            };
+
+            if status.success() {
+                let _ = app.emit("download-status", EpisodeStatusPayload {
+                    episode: ep,
+                    status: "Completed".to_string(),
+                    error: None,
+                });
+            } else {
+                let _ = app.emit("download-status", EpisodeStatusPayload {
+                    episode: ep,
+                    status: "Failed".to_string(),
+                    error: Some(format!("Process exited with status: {}", status)),
+                });
             }
         });
     }

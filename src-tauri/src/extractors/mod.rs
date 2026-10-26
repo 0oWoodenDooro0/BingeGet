@@ -1,5 +1,9 @@
 pub mod chinaq;
+pub mod juqing;
+pub mod registry;
 pub mod text_normalize;
+
+pub use registry::{global_registry, ExtractorRegistry};
 
 use async_trait::async_trait;
 use crate::models::{SearchResult, SeriesMetadata};
@@ -11,6 +15,14 @@ pub trait SiteExtractor: Send + Sync {
     fn can_handle(&self, url: &str) -> bool;
 
     fn build_episode_referer(&self, category_slug: &str, drama_id: &str, ep_id: &str) -> String;
+
+    fn build_stream_referer(
+        &self,
+        drama_id: &str,
+        ep_id: &str,
+        channel: &str,
+        category_slug: Option<&str>,
+    ) -> String;
 
     async fn fetch_series_metadata(&self, client: &reqwest::Client, url: &str) -> anyhow::Result<SeriesMetadata>;
     async fn fetch_m3u8_for_episode(&self, client: &reqwest::Client, drama_id: &str, ep_id: &str, channel: &str) -> anyhow::Result<String>;

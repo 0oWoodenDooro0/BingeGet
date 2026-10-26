@@ -5,6 +5,7 @@ import type { SeriesMetadata, SeriesConfigModel, ProgressPayload, EpisodeStatusP
 describe('useDownloadQueue composable', () => {
   const dummyMetadata: SeriesMetadata = {
     drama_id: 'drama-123',
+    source_id: 'chinaq',
     category_slug: 'tv-tw',
     channels: [{ id: 'ikzy', name: 'iKun' }],
     episodes: [
@@ -192,6 +193,7 @@ describe('useDownloadQueue composable', () => {
     expect(mockInvoke).toHaveBeenCalledWith('start_download_queue', {
       req: {
         drama_id: 'drama-123',
+        source_id: 'chinaq',
         category_slug: 'tv-tw',
         channel_id: 'ikzy',
         episodes: [1, 2],
@@ -202,6 +204,34 @@ describe('useDownloadQueue composable', () => {
         max_concurrent: 2,
         binary_path: '/custom/bin',
       },
+    });
+  });
+
+  it('forwards custom source_id from metadata into DownloadQueuePayload', async () => {
+    const mockInvoke = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@tauri-apps/api/core', () => ({
+      invoke: mockInvoke,
+    }));
+
+    // @ts-expect-error Mock Tauri
+    window.__TAURI_INTERNALS__ = {};
+
+    const { startDownload } = useDownloadQueue({ autoListen: false });
+
+    await startDownload({
+      metadata: {
+        ...dummyMetadata,
+        source_id: 'juqing',
+      },
+      selectedEpisodes: [1],
+      selectedChannel: 'ikzy',
+      config: dummyConfig,
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('start_download_queue', {
+      req: expect.objectContaining({
+        source_id: 'juqing',
+      }),
     });
   });
 

@@ -77,6 +77,7 @@ export function useSeriesMetadata() {
 
         data = {
           drama_id: dramaId,
+          source_id: 'chinaq',
           category_slug: 'tv-cn',
           cover_url: `https://chinaq.fun/img/${dramaId}.jpg`,
           episodes: Array.from({ length: 36 }, (_, i) => ({

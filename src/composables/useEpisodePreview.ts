@@ -197,11 +197,38 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
     }
   };
 
+  const probeStream = async (
+    dramaId: string,
+    epId: string,
+    channel: string,
+    sourceId?: string
+  ): Promise<StreamDetails> => {
+    if (isTauri()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<StreamDetails>('probe_episode_stream', {
+        dramaId,
+        epId,
+        channel,
+        sourceId: sourceId || 'chinaq',
+        source_id: sourceId || 'chinaq',
+      });
+    }
+    return {
+      resolution: '1920x1080 (1080p)',
+      bitrate: '3,200 kbps',
+      video_codec: 'H.264 / AVC',
+      audio_codec: 'AAC',
+      fps: 30,
+      duration_secs: 2700,
+    };
+  };
+
   const loadPreview = async (
     dramaId: string,
     epId: string,
     epNumber: number,
-    channel: string
+    channel: string,
+    sourceId?: string
   ) => {
     activePreviewEp.value = epNumber;
     loading.value = true;
@@ -223,20 +250,27 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
             dramaId,
             epId,
             channel,
+            sourceId: sourceId || 'chinaq',
+            source_id: sourceId || 'chinaq',
           }),
           invoke<StreamDetails>('probe_episode_stream', {
             dramaId,
             epId,
             channel,
+            sourceId: sourceId || 'chinaq',
+            source_id: sourceId || 'chinaq',
           }),
         ]);
         info = streamRes;
         details = probeRes;
       } else {
         // Fallback for preview / dev / tests
+        const referer = sourceId === 'juqing'
+          ? `https://tw.juqing.app/vod/play/id/${dramaId}-${channel}-${epId}.html`
+          : `https://chinaq.fun/tv-cn/${dramaId}-${epId}.html`;
         info = {
           m3u8_url: `https://mock.stream/${dramaId}/${epId}.m3u8`,
-          referer: `https://chinaq.fun/tv-cn/${dramaId}-${epId}.html`,
+          referer,
           proxy_url: `http://127.0.0.1:8899/proxy?url=https://mock.stream/${dramaId}/${epId}.m3u8`,
         };
         details = {
@@ -283,6 +317,7 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
     volume,
     bindVideoElement,
     loadPreview,
+    probeStream,
     startPlayback,
     togglePlay,
     toggleMute,

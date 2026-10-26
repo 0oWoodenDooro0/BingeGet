@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import EpisodePicker from '../../src/components/EpisodePicker.vue';
 import type { EpisodeInfo, SeriesMetadata, StreamDetails } from '../../src/types';
+import * as episodePreviewComposable from '../../src/composables/useEpisodePreview';
+import { ref } from 'vue';
 
 describe('EpisodePicker.vue', () => {
   const sampleEpisodes: EpisodeInfo[] = [
@@ -633,5 +635,75 @@ describe('EpisodePicker.vue', () => {
 
     const badge = wrapper.find('[data-testid="telemetry-status-badge"]');
     expect(badge.attributes('data-probed')).toBe('true');
+  });
+  it("disables copy stream button and does not trigger copied feedback when currentStreamSource is empty", async () => {
+    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: writeTextSpy },
+      configurable: true,
+      writable: true,
+    });
+
+    const previewState = episodePreviewComposable.useEpisodePreview();
+    vi.spyOn(episodePreviewComposable, 'useEpisodePreview').mockReturnValue({
+      ...previewState,
+      currentStreamSource: ref(''),
+      loadPreview: vi.fn(),
+    });
+
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: "ikzy",
+      },
+    });
+
+    const copyBtn = wrapper.find("[data-testid=\"btn-copy-stream-url\"]");
+    expect(copyBtn.exists()).toBe(true);
+    expect(copyBtn.attributes("disabled")).toBeDefined();
+    expect(copyBtn.classes()).toContain("disabled:opacity-50");
+    expect(copyBtn.classes()).toContain("disabled:cursor-not-allowed");
+
+    await copyBtn.trigger("click");
+    await wrapper.vm.$nextTick();
+
+    expect(writeTextSpy).not.toHaveBeenCalled();
+    expect(copyBtn.find(".text-emerald-400").exists()).toBe(false);
+  });
+  it("enables copy stream button and triggers copied feedback when currentStreamSource is present and clipboard succeeds", async () => {
+    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: writeTextSpy },
+      configurable: true,
+      writable: true,
+    });
+
+    const previewState = episodePreviewComposable.useEpisodePreview();
+    vi.spyOn(episodePreviewComposable, "useEpisodePreview").mockReturnValue({
+      ...previewState,
+      currentStreamSource: ref("https://stream.example/live.m3u8"),
+      loadPreview: vi.fn(),
+    });
+
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        episodes: sampleEpisodes,
+        selectedEpisodes: [1],
+        metadata: sampleMetadata,
+        selectedChannel: "ikzy",
+      },
+    });
+
+    const copyBtn = wrapper.find("[data-testid=\"btn-copy-stream-url\"]");
+    expect(copyBtn.exists()).toBe(true);
+    expect(copyBtn.attributes("disabled")).toBeUndefined();
+
+    await copyBtn.trigger("click");
+    await wrapper.vm.$nextTick();
+
+    expect(writeTextSpy).toHaveBeenCalledWith("https://stream.example/live.m3u8");
+    expect(copyBtn.find(".text-emerald-400").exists()).toBe(true);
   });
 });

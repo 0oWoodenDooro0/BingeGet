@@ -21,6 +21,7 @@ pub struct ChannelOption {
 #[ts(export, export_to = "../../src/types/generated/")]
 pub struct SeriesMetadata {
     pub drama_id: String,
+    pub source_id: String,
     #[serde(default)]
     pub category_slug: Option<String>,
     #[serde(default)]
@@ -66,6 +67,8 @@ pub struct DownloadQueuePayload {
     pub binary_path: Option<String>,
     #[serde(default)]
     pub category_slug: Option<String>,
+    #[serde(default)]
+    pub source_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
