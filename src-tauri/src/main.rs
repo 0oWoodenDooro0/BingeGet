@@ -23,6 +23,8 @@ fn main() {
             probe_episode_stream,
             get_episode_preview_stream,
             start_download_queue,
+            cancel_download_task,
+            retry_download_task,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
