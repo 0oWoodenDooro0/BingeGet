@@ -1,6 +1,6 @@
 import { ref, shallowRef } from 'vue';
 import Hls from 'hls.js';
-import type { StreamDetails, PreviewStreamInfo } from '../types';
+import type { StreamDetails, PreviewStreamInfo, StreamSession } from '../types';
 import { FALLBACK_HINT, getMediaErrorMessage } from '../types';
 import { isTauri, getErrorMessage } from './useSystemEnvironment';
 
@@ -11,6 +11,7 @@ export interface UseEpisodePreviewOptions {
 export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
   const autoPlay = options.autoPlay === true;
   const activePreviewEp = ref<number>(1);
+  const streamSession = ref<StreamSession | null>(null);
   const streamDetails = ref<StreamDetails | null>(null);
   const previewStreamInfo = ref<PreviewStreamInfo | null>(null);
   const currentStreamSource = ref<string>('');
@@ -205,13 +206,14 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
   ): Promise<StreamDetails> => {
     if (isTauri()) {
       const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<StreamDetails>('probe_episode_stream', {
+      const session = await invoke<StreamSession>('prepare_episode_stream', {
         dramaId,
         epId,
         channel,
         sourceId: sourceId || 'chinaq',
         source_id: sourceId || 'chinaq',
       });
+      return session.stream_details;
     }
     return {
       resolution: '1920x1080 (1080p)',
@@ -235,61 +237,55 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
     error.value = '';
     currentTime.value = 0;
     duration.value = 0;
+    streamSession.value = null;
     streamDetails.value = null;
 
     cleanup();
 
     try {
-      let info: PreviewStreamInfo;
-      let details: StreamDetails;
+      let session: StreamSession;
 
       if (isTauri()) {
         const { invoke } = await import('@tauri-apps/api/core');
-        const [streamRes, probeRes] = await Promise.all([
-          invoke<PreviewStreamInfo>('get_episode_preview_stream', {
-            dramaId,
-            epId,
-            channel,
-            sourceId: sourceId || 'chinaq',
-            source_id: sourceId || 'chinaq',
-          }),
-          invoke<StreamDetails>('probe_episode_stream', {
-            dramaId,
-            epId,
-            channel,
-            sourceId: sourceId || 'chinaq',
-            source_id: sourceId || 'chinaq',
-          }),
-        ]);
-        info = streamRes;
-        details = probeRes;
+        session = await invoke<StreamSession>('prepare_episode_stream', {
+          dramaId,
+          epId,
+          channel,
+          sourceId: sourceId || 'chinaq',
+          source_id: sourceId || 'chinaq',
+        });
       } else {
         // Fallback for preview / dev / tests
         const referer = sourceId === 'juqing'
           ? `https://tw.juqing.app/vod/play/id/${dramaId}-${channel}-${epId}.html`
           : `https://chinaq.fun/tv-cn/${dramaId}-${epId}.html`;
-        info = {
+        session = {
           m3u8_url: `https://mock.stream/${dramaId}/${epId}.m3u8`,
           referer,
           proxy_url: `http://127.0.0.1:8899/proxy?url=https://mock.stream/${dramaId}/${epId}.m3u8`,
-        };
-        details = {
-          resolution: '1920x1080 (1080p)',
-          bitrate: '3,200 kbps',
-          video_codec: 'H.264 / AVC',
-          audio_codec: 'AAC',
-          fps: 30,
-          duration_secs: 2700,
+          stream_details: {
+            resolution: '1920x1080 (1080p)',
+            bitrate: '3,200 kbps',
+            video_codec: 'H.264 / AVC',
+            audio_codec: 'AAC',
+            fps: 30,
+            duration_secs: 2700,
+          },
         };
       }
 
-      previewStreamInfo.value = info;
-      streamDetails.value = details;
-      if (details.duration_secs && details.duration_secs > 0) {
-        duration.value = details.duration_secs;
+      streamSession.value = session;
+      previewStreamInfo.value = {
+        m3u8_url: session.m3u8_url,
+        referer: session.referer,
+        proxy_url: session.proxy_url,
+      };
+      streamDetails.value = session.stream_details;
+      if (session.stream_details.duration_secs && session.stream_details.duration_secs > 0) {
+        duration.value = session.stream_details.duration_secs;
       }
 
-      const streamSource = info.proxy_url || info.m3u8_url;
+      const streamSource = session.proxy_url || session.m3u8_url;
       currentStreamSource.value = streamSource;
 
       if (autoPlay) {
@@ -304,6 +300,7 @@ export function useEpisodePreview(options: UseEpisodePreviewOptions = {}) {
 
   return {
     activePreviewEp,
+    streamSession,
     streamDetails,
     previewStreamInfo,
     currentStreamSource,

@@ -295,3 +295,22 @@ fn test_detect_system_environment() {
     #[cfg(target_os = "linux")]
     assert!(env.gstreamer_ready.is_some());
 }
+
+#[tokio::test]
+async fn test_prepare_episode_stream_core_validation() {
+    let client = reqwest::Client::new();
+    let err = bingeget::commands::prepare_episode_stream_core(&client, "", "1", "ikzy", None, None)
+        .await
+        .unwrap_err();
+    assert!(err.contains("Drama ID cannot be empty"));
+
+    let err2 = bingeget::commands::prepare_episode_stream_core(&client, "drama1", "", "ikzy", None, None)
+        .await
+        .unwrap_err();
+    assert!(err2.contains("Episode ID cannot be empty"));
+
+    let err3 = bingeget::commands::prepare_episode_stream_core(&client, "drama1", "1", "", None, None)
+        .await
+        .unwrap_err();
+    assert!(err3.contains("Channel ID cannot be empty"));
+}

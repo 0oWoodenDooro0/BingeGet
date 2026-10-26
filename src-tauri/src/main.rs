@@ -22,6 +22,7 @@ fn main() {
             search_series,
             probe_episode_stream,
             get_episode_preview_stream,
+            prepare_episode_stream,
             start_download_queue,
         ])
         .run(tauri::generate_context!())

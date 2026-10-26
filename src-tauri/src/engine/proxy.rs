@@ -1,11 +1,13 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::LazyLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use anyhow::Result;
 use regex::Regex;
 use reqwest::Url;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::RwLock;
 
 static PROXY_PORT: AtomicU16 = AtomicU16::new(0);
 
@@ -13,8 +15,33 @@ static URI_ATTR_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"URI="([^"]+)""#).expect("Invalid URI attr regex")
 });
 
+static PLAYLIST_CACHE: LazyLock<RwLock<HashMap<String, (Instant, String)>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+const PLAYLIST_CACHE_TTL: Duration = Duration::from_secs(1800); // 30 minutes
+
 pub fn get_proxy_port() -> u16 {
     PROXY_PORT.load(Ordering::SeqCst)
+}
+
+pub async fn cache_playlist(url: &str, content: &str) {
+    let mut cache = PLAYLIST_CACHE.write().await;
+    cache.insert(url.to_string(), (Instant::now(), content.to_string()));
+}
+
+pub async fn get_cached_playlist(url: &str) -> Option<String> {
+    let cache = PLAYLIST_CACHE.read().await;
+    if let Some((instant, content)) = cache.get(url) {
+        if instant.elapsed() < PLAYLIST_CACHE_TTL {
+            return Some(content.clone());
+        }
+    }
+    None
+}
+
+pub async fn clear_playlist_cache() {
+    let mut cache = PLAYLIST_CACHE.write().await;
+    cache.clear();
 }
 
 pub fn build_proxy_client() -> reqwest::Client {
@@ -166,6 +193,27 @@ Content-Length: 0\r\n\
 
     let ref_str = referer.unwrap_or_default();
 
+    // Check if this playlist is already cached in memory
+    if let Some(cached_text) = get_cached_playlist(&target).await {
+        let rewritten = rewrite_m3u8(&cached_text, &target, &ref_str, port);
+        let rewritten_bytes = rewritten.into_bytes();
+
+        let header = format!(
+            "HTTP/1.1 200 OK\r\n\
+Access-Control-Allow-Origin: *\r\n\
+Access-Control-Allow-Methods: GET, OPTIONS\r\n\
+Access-Control-Allow-Headers: *\r\n\
+Content-Type: application/vnd.apple.mpegurl\r\n\
+Content-Length: {}\r\n\
+\r\n",
+            rewritten_bytes.len()
+        );
+
+        let _ = stream.write_all(header.as_bytes()).await;
+        let _ = stream.write_all(&rewritten_bytes).await;
+        return;
+    }
+
     let mut req = client
         .get(&target)
         .header(
@@ -226,13 +274,14 @@ Content-Length: 0\r\n\
                 }
             };
 
-            // If it is an M3U8 playlist, rewrite the URLs
+            // If it is an M3U8 playlist, rewrite the URLs and cache the playlist
             let is_m3u8 = content_type.contains("mpegurl")
                 || target.contains(".m3u8")
                 || bytes.starts_with(b"#EXTM3U");
 
             if is_m3u8 {
                 let text = String::from_utf8_lossy(&bytes);
+                cache_playlist(&target, &text).await;
                 let rewritten = rewrite_m3u8(&text, &target, &ref_str, port);
                 let rewritten_bytes = rewritten.into_bytes();
 
