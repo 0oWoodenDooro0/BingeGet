@@ -788,6 +788,7 @@ impl SiteExtractor for JuqingExtractor {
             )
             .send()
             .await?
+            .error_for_status()?
             .text()
             .await?;
 
@@ -824,6 +825,7 @@ impl SiteExtractor for JuqingExtractor {
             .header("Referer", &referer)
             .send()
             .await?
+            .error_for_status()?
             .text()
             .await?;
 
@@ -849,6 +851,7 @@ impl SiteExtractor for JuqingExtractor {
             )
             .send()
             .await?
+            .error_for_status()?
             .text()
             .await?;
 
