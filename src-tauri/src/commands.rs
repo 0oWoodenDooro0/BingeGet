@@ -6,10 +6,11 @@ pub use crate::engine::queue::{
     cancel_download_task_core, retry_download_task_core, run_download_queue,
     start_download_queue_core,
 };
+pub use crate::engine::stream::prepare_episode_stream as prepare_episode_stream_core;
 use crate::extractors::{global_catalog, Catalog, ExtractorRegistry};
 use crate::models::{
     DownloadQueuePayload, PreviewStreamInfo, SearchResult, SeriesMetadata, StreamDetails,
-    SystemEnvironment,
+    StreamSession, SystemEnvironment,
 };
 
 pub fn resolve_binary_path(name: &str, preferred: &str) -> Option<String> {
@@ -151,6 +152,26 @@ pub async fn probe_episode_stream(
 }
 
 #[tauri::command]
+pub async fn prepare_episode_stream(
+    client: State<'_, reqwest::Client>,
+    drama_id: String,
+    ep_id: String,
+    channel: String,
+    source_id: Option<String>,
+) -> Result<StreamSession, String> {
+    let ffprobe_bin = resolve_binary_path("ffprobe", "/usr/bin/ffprobe");
+    prepare_episode_stream_core(
+        &client,
+        &drama_id,
+        &ep_id,
+        &channel,
+        source_id.as_deref(),
+        ffprobe_bin.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn get_episode_preview_stream(
     client: State<'_, reqwest::Client>,
     drama_id: String,
@@ -158,29 +179,18 @@ pub async fn get_episode_preview_stream(
     channel: String,
     source_id: Option<String>,
 ) -> Result<PreviewStreamInfo, String> {
-    let (m3u8_url, referer) = global_catalog()
-        .resolve_stream_with_referer(
-            &client,
-            &drama_id,
-            &ep_id,
-            &channel,
-            source_id.as_deref(),
-        )
-        .await?;
+    let ffprobe_bin = resolve_binary_path("ffprobe", "/usr/bin/ffprobe");
+    let session = prepare_episode_stream_core(
+        &client,
+        &drama_id,
+        &ep_id,
+        &channel,
+        source_id.as_deref(),
+        ffprobe_bin.as_deref(),
+    )
+    .await?;
 
-    let proxy_port = crate::engine::proxy::start_streaming_proxy(client.inner().clone())
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let proxy_url = Some(crate::engine::proxy::build_proxy_url(
-        proxy_port, &m3u8_url, &referer,
-    ));
-
-    Ok(PreviewStreamInfo {
-        m3u8_url,
-        referer,
-        proxy_url,
-    })
+    Ok(session.to_preview_stream_info())
 }
 
 #[tauri::command]

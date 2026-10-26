@@ -7,7 +7,6 @@ use regex::Regex;
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
-use crate::extractors::global_catalog;
 use crate::models::StreamDetails;
 
 static STREAM_INF_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -31,6 +30,49 @@ static PROBE_CACHE: LazyLock<RwLock<HashMap<(String, String, String, String), (I
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 const CACHE_TTL: Duration = Duration::from_secs(1800); // 30 minutes
+
+pub async fn get_cached_probe_details(
+    sid: &str,
+    drama_id: &str,
+    ep_id: &str,
+    channel: &str,
+) -> Option<StreamDetails> {
+    let key = (
+        sid.to_string(),
+        drama_id.to_string(),
+        ep_id.to_string(),
+        channel.to_string(),
+    );
+    let cache_read = PROBE_CACHE.read().await;
+    if let Some((instant, ref details)) = cache_read.get(&key) {
+        if instant.elapsed() < CACHE_TTL {
+            return Some(details.clone());
+        }
+    }
+    None
+}
+
+pub async fn set_cached_probe_details(
+    sid: &str,
+    drama_id: &str,
+    ep_id: &str,
+    channel: &str,
+    details: StreamDetails,
+) {
+    let key = (
+        sid.to_string(),
+        drama_id.to_string(),
+        ep_id.to_string(),
+        channel.to_string(),
+    );
+    let mut cache_write = PROBE_CACHE.write().await;
+    cache_write.insert(key, (Instant::now(), details));
+}
+
+pub async fn clear_probe_cache() {
+    let mut cache_write = PROBE_CACHE.write().await;
+    cache_write.clear();
+}
 
 fn format_number_commas(n: u64) -> String {
     let s = n.to_string();
@@ -275,80 +317,15 @@ pub async fn probe_stream_core(
     ffprobe_path: Option<&str>,
     source_id: Option<&str>,
 ) -> Result<StreamDetails, String> {
-    let sid = source_id.unwrap_or("chinaq");
-    let cache_key = (
-        sid.to_string(),
-        drama_id.to_string(),
-        ep_id.to_string(),
-        channel.to_string(),
-    );
+    let session = crate::engine::stream::prepare_episode_stream(
+        client,
+        drama_id,
+        ep_id,
+        channel,
+        source_id,
+        ffprobe_path,
+    )
+    .await?;
 
-    // 1. Check in-memory cache
-    {
-        let cache_read = PROBE_CACHE.read().await;
-        if let Some((instant, ref details)) = cache_read.get(&cache_key) {
-            if instant.elapsed() < CACHE_TTL {
-                return Ok(details.clone());
-            }
-        }
-    }
-
-    // 2. Resolve M3U8 URL and referer via Catalog
-    let (m3u8_url, referer) = global_catalog()
-        .resolve_stream_with_referer(client, drama_id, ep_id, channel, Some(sid))
-        .await
-        .map_err(|e| format!("Failed to fetch M3U8 URL: {}", e))?;
-
-    // 3. Stage 1: Fetch playlist content and inspect Master tags
-    let playlist_resp = client
-        .get(&m3u8_url)
-        .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36")
-        .header("Referer", &referer)
-        .send()
-        .await;
-
-    let mut stream_details: Option<StreamDetails> = None;
-
-    if let Ok(resp) = playlist_resp {
-        if let Ok(content) = resp.text().await {
-            if let Some(master_details) = parse_m3u8_master_tags(&content) {
-                stream_details = Some(master_details);
-            }
-        }
-    }
-
-    // 4. Stage 2: Fallback to local ffprobe if no master tags found
-    let details = match stream_details {
-        Some(d) => d,
-        None => {
-            if let Some(probe_bin) = ffprobe_path {
-                probe_with_ffprobe(probe_bin, &m3u8_url, Some(&referer))
-                    .unwrap_or_else(|_| StreamDetails {
-                        resolution: "未知 (需 ffprobe)".to_string(),
-                        bitrate: "未知".to_string(),
-                        video_codec: "未知".to_string(),
-                        audio_codec: "未知".to_string(),
-                        fps: None,
-                        duration_secs: None,
-                    })
-            } else {
-                StreamDetails {
-                    resolution: "未知 (需 ffprobe)".to_string(),
-                    bitrate: "未知".to_string(),
-                    video_codec: "未知".to_string(),
-                    audio_codec: "未知".to_string(),
-                    fps: None,
-                    duration_secs: None,
-                }
-            }
-        }
-    };
-
-    // 5. Update cache
-    {
-        let mut cache_write = PROBE_CACHE.write().await;
-        cache_write.insert(cache_key, (Instant::now(), details.clone()));
-    }
-
-    Ok(details)
+    Ok(session.stream_details)
 }
