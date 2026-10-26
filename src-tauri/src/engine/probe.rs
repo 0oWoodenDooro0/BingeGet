@@ -7,6 +7,7 @@ use regex::Regex;
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
+use crate::extractors::global_catalog;
 use crate::models::StreamDetails;
 
 static STREAM_INF_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -292,18 +293,11 @@ pub async fn probe_stream_core(
         }
     }
 
-    // 2. Resolve M3U8 URL via Extractor
-    let registry = crate::extractors::global_registry();
-    let extractor = registry
-        .get_by_source_id(sid)
-        .ok_or_else(|| format!("Extractor not found for source: {}", sid))?;
-
-    let m3u8_url = extractor
-        .fetch_m3u8_for_episode(client, drama_id, ep_id, channel)
+    // 2. Resolve M3U8 URL and referer via Catalog
+    let (m3u8_url, referer) = global_catalog()
+        .resolve_stream_with_referer(client, drama_id, ep_id, channel, Some(sid))
         .await
         .map_err(|e| format!("Failed to fetch M3U8 URL: {}", e))?;
-
-    let referer = extractor.build_stream_referer(drama_id, ep_id, channel, None);
 
     // 3. Stage 1: Fetch playlist content and inspect Master tags
     let playlist_resp = client

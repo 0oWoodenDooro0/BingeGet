@@ -4,8 +4,7 @@ use tauri::State;
 use crate::engine::probe::probe_stream_core;
 use crate::engine::queue::run_download_queue;
 pub use crate::engine::queue::start_download_queue_core;
-use crate::extractors::global_registry;
-use crate::extractors::ExtractorRegistry;
+use crate::extractors::{global_catalog, Catalog, ExtractorRegistry};
 use crate::models::{
     DownloadQueuePayload, PreviewStreamInfo, SearchResult, SeriesMetadata, StreamDetails,
     SystemEnvironment,
@@ -59,20 +58,7 @@ pub async fn parse_series_metadata_core(
     client: &reqwest::Client,
     url: &str,
 ) -> Result<SeriesMetadata, String> {
-    let url = url.trim();
-    if url.is_empty() {
-        return Err("URL cannot be empty".to_string());
-    }
-
-    let registry = global_registry();
-    if let Some(extractor) = registry.get_by_url(url) {
-        return extractor
-            .fetch_series_metadata(client, url)
-            .await
-            .map_err(|e| e.to_string());
-    }
-
-    Err(format!("Unsupported website URL: {}", url))
+    global_catalog().parse_series_metadata(client, url).await
 }
 
 pub async fn fetch_episode_m3u8_core(
@@ -82,26 +68,17 @@ pub async fn fetch_episode_m3u8_core(
     channel: &str,
     source_id: Option<&str>,
 ) -> Result<String, String> {
-    if drama_id.trim().is_empty() {
-        return Err("Drama ID cannot be empty".to_string());
-    }
-    if ep_id.trim().is_empty() {
-        return Err("Episode ID cannot be empty".to_string());
-    }
-    if channel.trim().is_empty() {
-        return Err("Channel ID cannot be empty".to_string());
-    }
-
-    let sid = source_id.unwrap_or("chinaq");
-    let registry = global_registry();
-    let extractor = registry
-        .get_by_source_id(sid)
-        .ok_or_else(|| format!("Extractor not found for source: {}", sid))?;
-
-    extractor
-        .fetch_m3u8_for_episode(client, drama_id, ep_id, channel)
+    global_catalog()
+        .fetch_episode_m3u8(client, drama_id, ep_id, channel, source_id)
         .await
-        .map_err(|e| e.to_string())
+}
+
+pub async fn search_series_with_catalog(
+    client: &reqwest::Client,
+    keyword: &str,
+    catalog: &Catalog,
+) -> Result<Vec<SearchResult>, String> {
+    catalog.search(client, keyword).await
 }
 
 pub async fn search_series_with_registry(
@@ -109,47 +86,14 @@ pub async fn search_series_with_registry(
     keyword: &str,
     registry: &ExtractorRegistry,
 ) -> Result<Vec<SearchResult>, String> {
-    let kw = keyword.trim();
-    if kw.is_empty() {
-        return Err("Keyword cannot be empty".to_string());
-    }
-
-    let extractors = registry.all();
-    let mut handles = Vec::new();
-
-    for extractor in extractors {
-        let client_clone = client.clone();
-        let kw_string = kw.to_string();
-        handles.push(tokio::spawn(async move {
-            let name = extractor.name();
-            let res = extractor.search(&client_clone, &kw_string).await;
-            (name, res)
-        }));
-    }
-
-    let mut all_results = Vec::new();
-    for handle in handles {
-        match handle.await {
-            Ok((_name, Ok(results))) => {
-                all_results.extend(results);
-            }
-            Ok((name, Err(e))) => {
-                eprintln!("Search error on {}: {}", name, e);
-            }
-            Err(e) => {
-                eprintln!("Search task join error: {}", e);
-            }
-        }
-    }
-
-    Ok(all_results)
+    search_series_with_catalog(client, keyword, registry).await
 }
 
 pub async fn search_series_core(
     client: &reqwest::Client,
     keyword: &str,
 ) -> Result<Vec<SearchResult>, String> {
-    search_series_with_registry(client, keyword, global_registry()).await
+    global_catalog().search(client, keyword).await
 }
 
 #[tauri::command]
@@ -212,13 +156,15 @@ pub async fn get_episode_preview_stream(
     channel: String,
     source_id: Option<String>,
 ) -> Result<PreviewStreamInfo, String> {
-    let m3u8_url = fetch_episode_m3u8_core(&client, &drama_id, &ep_id, &channel, source_id.as_deref()).await?;
-    let sid = source_id.as_deref().unwrap_or("chinaq");
-    let registry = global_registry();
-    let extractor = registry
-        .get_by_source_id(sid)
-        .ok_or_else(|| format!("Extractor not found for source: {}", sid))?;
-    let referer = extractor.build_stream_referer(&drama_id, &ep_id, &channel, None);
+    let (m3u8_url, referer) = global_catalog()
+        .resolve_stream_with_referer(
+            &client,
+            &drama_id,
+            &ep_id,
+            &channel,
+            source_id.as_deref(),
+        )
+        .await?;
 
     let proxy_port = crate::engine::proxy::start_streaming_proxy(client.inner().clone())
         .await
