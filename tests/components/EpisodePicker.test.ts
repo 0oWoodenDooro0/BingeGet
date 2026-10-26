@@ -747,4 +747,37 @@ describe('EpisodePicker.vue', () => {
     await ep2PreviewBtn.trigger('click');
     expect(loadPreviewSpy).toHaveBeenCalledWith(2, 'ikzy');
   });
+
+  it('respects and visually indicates missingEpisodesForLockedChannel from session', async () => {
+    const session = useSeriesSession();
+    session.metadata.value = {
+      ...sampleMetadata,
+      episodes: [
+        { ep_number: 1, ep_title: '第1集', ep_id: 'ep1', available_channels: ['ikzy', 'hnzy'] },
+        { ep_number: 2, ep_title: '第2集', ep_id: 'ep2', available_channels: ['ikzy'] },
+      ],
+    };
+    session.selectedChannel.value = 'hnzy';
+
+    const wrapper = mount(EpisodePicker, {
+      props: {
+        session,
+      },
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+    await wrapper.vm.$nextTick();
+
+    const banner = wrapper.find('[data-testid="missing-episodes-banner"]');
+    expect(banner.exists()).toBe(true);
+
+    const ep2Item = wrapper.find('[data-testid="episode-item"][data-episode-number="2"]');
+    expect(ep2Item.attributes('data-missing')).toBe('true');
+
+    const missingBadge = ep2Item.find('[data-testid="missing-episode-badge"]');
+    expect(missingBadge.exists()).toBe(true);
+
+    const ep2PreviewBtn = ep2Item.find('[data-testid="btn-preview-episode"]');
+    expect(ep2PreviewBtn.attributes('disabled')).toBeDefined();
+  });
 });

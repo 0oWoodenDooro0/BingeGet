@@ -2,8 +2,12 @@ use crate::engine::probe::{
     get_cached_probe_details, parse_m3u8_master_tags, probe_with_ffprobe, set_cached_probe_details,
 };
 use crate::engine::proxy::{build_proxy_url, cache_playlist, get_cached_playlist, start_streaming_proxy};
-use crate::extractors::global_registry;
+use crate::extractors::global_catalog;
 use crate::models::{StreamDetails, StreamSession};
+use reqwest::header::USER_AGENT;
+
+pub const DEFAULT_USER_AGENT: &str =
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 pub async fn prepare_episode_stream(
     client: &reqwest::Client,
@@ -28,18 +32,11 @@ pub async fn prepare_episode_stream(
     }
 
     let sid = source_id.unwrap_or("chinaq");
-    let registry = global_registry();
-    let extractor = registry
-        .get_by_source_id(sid)
-        .ok_or_else(|| format!("Extractor not found for source: {}", sid))?;
 
-    // 1. Resolve upstream M3U8 URL and build Referer header
-    let m3u8_url = extractor
-        .fetch_m3u8_for_episode(client, drama_id, ep_id, channel)
-        .await
-        .map_err(|e| format!("Failed to fetch M3U8 URL: {}", e))?;
-
-    let referer = extractor.build_stream_referer(drama_id, ep_id, channel, None);
+    // 1. Resolve upstream M3U8 URL and build Referer header through global_catalog
+    let (m3u8_url, referer) = global_catalog()
+        .resolve_stream_with_referer(client, drama_id, ep_id, channel, source_id)
+        .await?;
 
     // 2. Ensure streaming proxy server is running
     let proxy_port = start_streaming_proxy(client.clone())
@@ -52,10 +49,7 @@ pub async fn prepare_episode_stream(
         None => {
             let resp = client
                 .get(&m3u8_url)
-                .header(
-                    "User-Agent",
-                    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                )
+                .header(USER_AGENT, DEFAULT_USER_AGENT)
                 .header("Referer", &referer)
                 .send()
                 .await

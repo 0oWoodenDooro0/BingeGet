@@ -6,11 +6,10 @@ use tokio::io::{AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::{Mutex, oneshot};
 
-use crate::commands::fetch_episode_m3u8_core;
 use crate::engine::downloader::{
     build_download_args, parse_progress_line, DownloadConfig, DownloadProgress, DownloadTaskSpec,
 };
-use crate::extractors::global_registry;
+use crate::extractors::global_catalog;
 use crate::models::{DownloadQueuePayload, EpisodeStatusPayload, ProgressPayload};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -114,22 +113,22 @@ impl TaskQueue {
             .count()
     }
 
-    pub fn is_active(&self, episode: u32) -> bool {
-        self.active_handles.contains_key(&episode)
+    pub fn is_active(&self, episode_number: u32) -> bool {
+        self.active_handles.contains_key(&episode_number)
     }
 
-    pub fn register_active_handle(&mut self, episode: u32, handle: ActiveTaskHandle) {
-        self.active_handles.insert(episode, handle);
+    pub fn register_active_handle(&mut self, episode_number: u32, handle: ActiveTaskHandle) {
+        self.active_handles.insert(episode_number, handle);
     }
 
-    pub fn update_active_child_pid(&mut self, episode: u32, pid: u32) {
-        if let Some(handle) = self.active_handles.get_mut(&episode) {
+    pub fn update_active_child_pid(&mut self, episode_number: u32, pid: u32) {
+        if let Some(handle) = self.active_handles.get_mut(&episode_number) {
             handle.child_pid = Some(pid);
         }
     }
 
-    pub fn unregister_active_handle(&mut self, episode: u32) -> Option<ActiveTaskHandle> {
-        self.active_handles.remove(&episode)
+    pub fn unregister_active_handle(&mut self, episode_number: u32) -> Option<ActiveTaskHandle> {
+        self.active_handles.remove(&episode_number)
     }
 
     pub fn get_next_tasks_to_start(&self) -> Vec<DownloadTaskSpec> {
@@ -147,33 +146,43 @@ impl TaskQueue {
             .collect()
     }
 
-    pub fn set_task_state(&mut self, episode: u32, state: QueueTaskState) {
-        if let Some(task) = self.tasks.iter_mut().find(|t| t.spec.episode == episode) {
+    pub fn set_task_state(&mut self, episode_number: u32, state: QueueTaskState) {
+        if let Some(task) = self.tasks.iter_mut().find(|t| t.spec.episode == episode_number) {
             task.state = state;
         }
     }
 
-    pub fn get_task(&self, episode: u32) -> Option<&QueueItem> {
-        self.tasks.iter().find(|t| t.spec.episode == episode)
+    pub fn get_task(&self, episode_number: u32) -> Option<&QueueItem> {
+        self.tasks.iter().find(|t| t.spec.episode == episode_number)
     }
 
     pub fn all_tasks(&self) -> &[QueueItem] {
         &self.tasks
     }
 
-    pub fn cancel(&mut self, episode: u32) -> bool {
+    pub fn cancel(&mut self, episode_number: u32) -> bool {
         let mut found = false;
-        if let Some(task) = self.tasks.iter_mut().find(|t| t.spec.episode == episode) {
+        if let Some(task) = self.tasks.iter_mut().find(|t| t.spec.episode == episode_number) {
             task.state = QueueTaskState::Cancelled;
             found = true;
         }
 
-        if let Some(handle) = self.active_handles.remove(&episode) {
+        if let Some(handle) = self.active_handles.remove(&episode_number) {
             found = true;
-            if let Some(tx) = handle.kill_sender {
-                let _ = tx.send(());
+            let signaled = if let Some(tx) = handle.kill_sender {
+                tx.send(()).is_ok()
+            } else {
+                false
+            };
+            if !signaled {
+                handle.abort_handle.abort();
+            } else if let Ok(rt) = tokio::runtime::Handle::try_current() {
+                let abort_handle = handle.abort_handle;
+                rt.spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    abort_handle.abort();
+                });
             }
-            handle.abort_handle.abort();
             #[cfg(unix)]
             if let Some(pid) = handle.child_pid {
                 let _ = std::process::Command::new("kill")
@@ -185,8 +194,8 @@ impl TaskQueue {
         found
     }
 
-    pub fn retry(&mut self, episode: u32) -> bool {
-        if let Some(task) = self.tasks.iter_mut().find(|t| t.spec.episode == episode) {
+    pub fn retry(&mut self, episode_number: u32) -> bool {
+        if let Some(task) = self.tasks.iter_mut().find(|t| t.spec.episode == episode_number) {
             if matches!(task.state, QueueTaskState::Failed(_) | QueueTaskState::Cancelled) {
                 task.state = QueueTaskState::Queued;
                 return true;
@@ -197,10 +206,20 @@ impl TaskQueue {
 
     pub fn clear(&mut self) {
         for (_, handle) in self.active_handles.drain() {
-            if let Some(tx) = handle.kill_sender {
-                let _ = tx.send(());
+            let signaled = if let Some(tx) = handle.kill_sender {
+                tx.send(()).is_ok()
+            } else {
+                false
+            };
+            if !signaled {
+                handle.abort_handle.abort();
+            } else if let Ok(rt) = tokio::runtime::Handle::try_current() {
+                let abort_handle = handle.abort_handle;
+                rt.spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    abort_handle.abort();
+                });
             }
-            handle.abort_handle.abort();
             #[cfg(unix)]
             if let Some(pid) = handle.child_pid {
                 let _ = std::process::Command::new("kill")
@@ -231,13 +250,13 @@ pub fn global_task_queue() -> &'static SharedTaskQueue {
     &GLOBAL_QUEUE
 }
 
-fn emit_progress_if_matched(app: &Option<tauri::AppHandle>, line: &str, ep: u32) {
+fn emit_progress_if_matched(app: &Option<tauri::AppHandle>, line: &str, episode_number: u32) {
     if let Some(app) = app {
         if let Some(prog) = parse_progress_line(line) {
             let _ = app.emit(
                 "download-progress",
                 ProgressPayload {
-                    episode: ep,
+                    episode: episode_number,
                     percent: prog.percent,
                     speed: prog.speed,
                     eta: prog.eta,
@@ -247,17 +266,17 @@ fn emit_progress_if_matched(app: &Option<tauri::AppHandle>, line: &str, ep: u32)
     }
 }
 
-async fn complete_task(queue: &SharedTaskQueue, app: &Option<tauri::AppHandle>, ep: u32) {
+async fn complete_task(queue: &SharedTaskQueue, app: &Option<tauri::AppHandle>, episode_number: u32) {
     {
         let mut q = queue.lock().await;
-        q.unregister_active_handle(ep);
-        q.set_task_state(ep, QueueTaskState::Completed);
+        q.unregister_active_handle(episode_number);
+        q.set_task_state(episode_number, QueueTaskState::Completed);
     }
     if let Some(app) = app {
         let _ = app.emit(
             "download-status",
             EpisodeStatusPayload {
-                episode: ep,
+                episode: episode_number,
                 status: "Completed".to_string(),
                 error: None,
             },
@@ -269,17 +288,17 @@ async fn complete_task(queue: &SharedTaskQueue, app: &Option<tauri::AppHandle>, 
     });
 }
 
-async fn fail_task(queue: &SharedTaskQueue, app: &Option<tauri::AppHandle>, ep: u32, err: String) {
+async fn fail_task(queue: &SharedTaskQueue, app: &Option<tauri::AppHandle>, episode_number: u32, err: String) {
     {
         let mut q = queue.lock().await;
-        q.unregister_active_handle(ep);
-        q.set_task_state(ep, QueueTaskState::Failed(err.clone()));
+        q.unregister_active_handle(episode_number);
+        q.set_task_state(episode_number, QueueTaskState::Failed(err.clone()));
     }
     if let Some(app) = app {
         let _ = app.emit(
             "download-status",
             EpisodeStatusPayload {
-                episode: ep,
+                episode: episode_number,
                 status: "Failed".to_string(),
                 error: Some(err),
             },
@@ -291,11 +310,11 @@ async fn fail_task(queue: &SharedTaskQueue, app: &Option<tauri::AppHandle>, ep: 
     });
 }
 
-async fn cleanup_cancelled_task(queue: &SharedTaskQueue, ep: u32) {
+async fn cleanup_cancelled_task(queue: &SharedTaskQueue, episode_number: u32) {
     {
         let mut q = queue.lock().await;
-        q.unregister_active_handle(ep);
-        q.set_task_state(ep, QueueTaskState::Cancelled);
+        q.unregister_active_handle(episode_number);
+        q.set_task_state(episode_number, QueueTaskState::Cancelled);
     }
     let q_clone = queue.clone();
     tokio::spawn(async move {
@@ -309,46 +328,43 @@ async fn run_single_task(
     spec: DownloadTaskSpec,
     mut kill_rx: oneshot::Receiver<()>,
 ) {
-    let ep = spec.episode;
-    let ep_str = format!("ep{}", ep);
+    let episode_number = spec.episode;
+    let episode_id = format!("ep{}", episode_number);
     let app = ctx.app.clone();
 
-    let registry = global_registry();
-    let extractor = match registry.get_by_source_id(&ctx.source_id) {
-        Some(e) => e,
-        None => {
-            let err = format!("Extractor not found for source: {}", ctx.source_id);
-            fail_task(&queue, &app, ep, err).await;
+    let referer = match global_catalog().build_stream_referer(
+        Some(&ctx.source_id),
+        &ctx.drama_id,
+        &episode_id,
+        &ctx.channel_id,
+        Some(&ctx.category_slug),
+    ) {
+        Ok(r) => r,
+        Err(err) => {
+            fail_task(&queue, &app, episode_number, err).await;
             return;
         }
     };
 
-    let referer = extractor.build_stream_referer(
-        &ctx.drama_id,
-        &ep_str,
-        &ctx.channel_id,
-        Some(&ctx.category_slug),
-    );
-
-    // 1. Fetch live m3u8 URL for this episode
-    let fetch_fut = fetch_episode_m3u8_core(
+    // 1. Fetch live m3u8 URL for this episode through global_catalog
+    let fetch_fut = global_catalog().fetch_episode_m3u8(
         &ctx.client,
         &ctx.drama_id,
-        &ep_str,
+        &episode_id,
         &ctx.channel_id,
         Some(&ctx.source_id),
     );
 
     let m3u8_url = tokio::select! {
         _ = &mut kill_rx => {
-            cleanup_cancelled_task(&queue, ep).await;
+            cleanup_cancelled_task(&queue, episode_number).await;
             return;
         }
         res = fetch_fut => {
             match res {
                 Ok(url) => url,
                 Err(e) => {
-                    fail_task(&queue, &app, ep, format!("Failed to fetch m3u8: {}", e)).await;
+                    fail_task(&queue, &app, episode_number, format!("Failed to fetch m3u8: {}", e)).await;
                     return;
                 }
             }
@@ -359,7 +375,7 @@ async fn run_single_task(
         m3u8_url,
         custom_title: ctx.custom_title.clone(),
         season: ctx.season,
-        episode: ep,
+        episode: episode_number,
         save_dir: ctx.save_dir.clone(),
         referer,
     };
@@ -383,7 +399,7 @@ async fn run_single_task(
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
-            fail_task(&queue, &app, ep, format!("Failed to start {}: {}", bin, e)).await;
+            fail_task(&queue, &app, episode_number, format!("Failed to start {}: {}", bin, e)).await;
             return;
         }
     };
@@ -391,7 +407,7 @@ async fn run_single_task(
     let child_pid = child.id();
     if let Some(pid) = child_pid {
         let mut q = queue.lock().await;
-        q.update_active_child_pid(ep, pid);
+        q.update_active_child_pid(episode_number, pid);
     }
 
     // Drain stderr in separate task
@@ -422,7 +438,7 @@ async fn run_single_task(
                     if b == b'\r' || b == b'\n' {
                         if !line_buf.is_empty() {
                             let line_str = String::from_utf8_lossy(&line_buf);
-                            emit_progress_if_matched(&app_clone, &line_str, ep);
+                            emit_progress_if_matched(&app_clone, &line_str, episode_number);
                             line_buf.clear();
                         }
                     } else {
@@ -432,7 +448,7 @@ async fn run_single_task(
             }
             if !line_buf.is_empty() {
                 let line_str = String::from_utf8_lossy(&line_buf);
-                emit_progress_if_matched(&app_clone, &line_str, ep);
+                emit_progress_if_matched(&app_clone, &line_str, episode_number);
             }
         })
     });
@@ -448,7 +464,7 @@ async fn run_single_task(
             if let Some(pid) = child_pid {
                 let _ = std::process::Command::new("kill").args(["-9", &pid.to_string()]).output();
             }
-            cleanup_cancelled_task(&queue, ep).await;
+            cleanup_cancelled_task(&queue, episode_number).await;
         }
         wait_res = child.wait() => {
             if let Some(h) = stdout_handle {
@@ -457,13 +473,13 @@ async fn run_single_task(
             match wait_res {
                 Ok(status) => {
                     if status.success() {
-                        complete_task(&queue, &app, ep).await;
+                        complete_task(&queue, &app, episode_number).await;
                     } else {
-                        fail_task(&queue, &app, ep, format!("Process exited with status: {}", status)).await;
+                        fail_task(&queue, &app, episode_number, format!("Process exited with status: {}", status)).await;
                     }
                 }
                 Err(e) => {
-                    fail_task(&queue, &app, ep, format!("Failed waiting for process: {}", e)).await;
+                    fail_task(&queue, &app, episode_number, format!("Failed waiting for process: {}", e)).await;
                 }
             }
         }
@@ -492,12 +508,12 @@ pub fn dispatch_queue<'a>(queue: &'a SharedTaskQueue) -> std::pin::Pin<Box<dyn s
     if tasks_to_spawn.is_empty() { return; }
 
     for spec in tasks_to_spawn {
-        let ep = spec.episode;
+        let episode_number = spec.episode;
         if let Some(app) = &ctx.app {
             let _ = app.emit(
                 "download-status",
                 EpisodeStatusPayload {
-                    episode: ep,
+                    episode: episode_number,
                     status: "Downloading".to_string(),
                     error: None,
                 },
@@ -516,7 +532,7 @@ pub fn dispatch_queue<'a>(queue: &'a SharedTaskQueue) -> std::pin::Pin<Box<dyn s
         {
             let mut q = queue.lock().await;
             q.register_active_handle(
-                ep,
+                episode_number,
                 ActiveTaskHandle {
                     abort_handle: join_handle.abort_handle(),
                     child_pid: None,
@@ -557,12 +573,12 @@ pub async fn start_download_queue_with_queue(
         q.set_max_concurrent(max_concurrent);
         q.set_execution_ctx(ctx);
 
-        for ep in req.episodes {
+        for episode_number in req.episodes {
             let spec = DownloadTaskSpec {
                 m3u8_url: String::new(),
                 custom_title: req.custom_title.clone(),
                 season: req.season,
-                episode: ep,
+                episode: episode_number,
                 save_dir: req.save_dir.clone(),
                 referer: String::new(),
             };

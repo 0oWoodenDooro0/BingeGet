@@ -293,5 +293,19 @@ describe('useSeriesSession composable', () => {
       expect(pauseSpy).toHaveBeenCalled();
       expect(session.isMediaAttached.value).toBe(false);
     });
+
+    it('supports clean typed loadPreview with options object', async () => {
+      const session = useSeriesSession();
+      session.metadata.value = {
+        drama_id: '123',
+        channels: [{ id: 'ikzy', name: 'ikzy' }],
+        episodes: [{ ep_number: 1, ep_id: 'ep1' }],
+      };
+      session.selectChannel('ikzy');
+
+      await session.loadPreview({ episodeNumber: 1, channel: 'ikzy' });
+      expect(session.activePreviewEp.value).toBe(1);
+      expect(session.streamDetails.value).not.toBeNull();
+    });
   });
 });

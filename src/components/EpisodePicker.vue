@@ -89,6 +89,25 @@ const currentChannelName = computed(() => {
   return found ? found.name : ch;
 });
 
+// Missing episodes detection for Semi-Auto Fallback & Channel Lock
+const missingEpisodes = computed<number[]>(() => {
+  if (props.session?.missingEpisodesForLockedChannel?.value) {
+    return props.session.missingEpisodesForLockedChannel.value;
+  }
+  const ch = effectiveSelectedChannel.value;
+  if (!ch || !effectiveMetadata.value) return [];
+  return effectiveMetadata.value.episodes
+    .filter((ep) => {
+      if (!ep.available_channels || ep.available_channels.length === 0) return false;
+      return !ep.available_channels.includes(ch);
+    })
+    .map((ep) => ep.ep_number);
+});
+
+const isEpisodeMissing = (epNum: number): boolean => {
+  return missingEpisodes.value.includes(epNum);
+};
+
 // Fallback preview composable when session is not provided directly
 const fallbackPreview = useEpisodePreview({ autoPlay: false });
 
@@ -180,9 +199,9 @@ const cleanup = () => {
   }
 };
 
-// Emit probe-complete when streamDetails updates for the active channel
+// Emit probe-complete when streamDetails updates for the active channel (legacy/fallback only)
 watch(streamDetails, (newDetails) => {
-  if (newDetails && effectiveSelectedChannel.value) {
+  if (!props.session && newDetails && effectiveSelectedChannel.value) {
     emit('probe-complete', { channel: effectiveSelectedChannel.value, details: newDetails });
   }
 });
@@ -203,14 +222,17 @@ const volumeStyle = computed(() => {
   return createProgressGradient(volume.value * 100);
 });
 
-const rawProbeData = computed(() => {
-  // If session is provided, use session.currentChannelProbe or session.channelProbeMap
+const rawProbeData = computed<StreamDetails | null>(() => {
+  // If session is provided, bind to session.currentChannelProbe and session.channelProbeMap
   if (props.session) {
-    const ch = props.session.selectedChannel.value;
-    if (ch && props.session.channelProbeMap.value[ch]) {
+    if (props.session.currentChannelProbe?.value) {
+      return props.session.currentChannelProbe.value;
+    }
+    const ch = props.session.selectedChannel?.value;
+    if (ch && props.session.channelProbeMap?.value?.[ch]) {
       return props.session.channelProbeMap.value[ch];
     }
-    if (props.session.streamDetails.value) {
+    if (props.session.streamDetails?.value) {
       return props.session.streamDetails.value;
     }
     return null;
@@ -346,10 +368,10 @@ const switchPreview = (epNum: number) => {
   const ep = effectiveEpisodes.value.find(e => e.ep_number === epNum);
   if (!ep) return;
 
-  emit('change-preview', epNum);
   if (props.session) {
     props.session.loadPreview(epNum, effectiveSelectedChannel.value);
   } else {
+    emit('change-preview', epNum);
     fallbackPreview.loadPreview(
       currentDramaId.value,
       ep.ep_id,
@@ -399,6 +421,7 @@ watch(
 const toggleEpisode = (epNum: number) => {
   if (props.session) {
     props.session.toggleEpisode(epNum);
+    return;
   }
   const current = [...effectiveSelectedEpisodes.value];
   const idx = current.indexOf(epNum);
@@ -414,6 +437,7 @@ const toggleEpisode = (epNum: number) => {
 const selectAll = () => {
   if (props.session) {
     props.session.selectAllEpisodes();
+    return;
   }
   emit('update:selectedEpisodes', effectiveEpisodes.value.map(e => e.ep_number));
 };
@@ -421,6 +445,7 @@ const selectAll = () => {
 const clearAll = () => {
   if (props.session) {
     props.session.clearSelectedEpisodes();
+    return;
   }
   emit('update:selectedEpisodes', []);
 };
@@ -428,6 +453,7 @@ const clearAll = () => {
 const selectFirstN = (n: number) => {
   if (props.session) {
     props.session.selectFirstNEpisodes(n);
+    return;
   }
   emit('update:selectedEpisodes', effectiveEpisodes.value.slice(0, n).map(e => e.ep_number));
 };
@@ -437,6 +463,7 @@ const applyRange = () => {
   const end = Math.max(rangeStart.value, rangeEnd.value);
   if (props.session) {
     props.session.selectEpisodeRange(start, end);
+    return;
   }
   const inRange = effectiveEpisodes.value
     .filter(e => e.ep_number >= start && e.ep_number <= end)
@@ -519,6 +546,18 @@ const applyRange = () => {
           </div>
         </div>
 
+        <!-- Missing Episodes Warning Banner (Semi-Auto Fallback / Channel Lock) -->
+        <div
+          v-if="missingEpisodes.length > 0"
+          data-testid="missing-episodes-banner"
+          class="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs text-amber-300"
+        >
+          <AlertCircle class="h-4 w-4 shrink-0 text-amber-400" />
+          <span>
+            鎖定頻道「{{ currentChannelName }}」缺少第 {{ missingEpisodes.join('、') }} 集，請進行單集頻道配置。
+          </span>
+        </div>
+
         <div class="flex items-center justify-between text-xs text-slate-400 pb-1">
           <span>點選預覽可即刻檢視畫面，點選集數卡片或勾選方塊加入下載</span>
           <span class="text-violet-400 font-medium">預覽中：第 {{ activePreviewEp }} 集</span>
@@ -530,14 +569,17 @@ const applyRange = () => {
             :key="ep.ep_number"
             data-testid="episode-item"
             :data-episode-number="ep.ep_number"
+            :data-missing="isEpisodeMissing(ep.ep_number)"
             @click="toggleEpisode(ep.ep_number)"
             :class="[
               'group flex items-center justify-between rounded-lg border p-2 text-xs select-none transition-all cursor-pointer',
-              activePreviewEp === ep.ep_number
-                ? 'border-violet-500 bg-violet-950/40 text-violet-100 ring-2 ring-violet-500/50 shadow-md shadow-violet-950/50'
-                : effectiveSelectedEpisodes.includes(ep.ep_number)
-                  ? 'border-indigo-500/60 bg-indigo-950/20 text-slate-200 hover:border-indigo-400'
-                  : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+              isEpisodeMissing(ep.ep_number)
+                ? 'border-amber-900/60 bg-amber-950/20 text-amber-200/90 hover:border-amber-700'
+                : activePreviewEp === ep.ep_number
+                  ? 'border-violet-500 bg-violet-950/40 text-violet-100 ring-2 ring-violet-500/50 shadow-md shadow-violet-950/50'
+                  : effectiveSelectedEpisodes.includes(ep.ep_number)
+                    ? 'border-indigo-500/60 bg-indigo-950/20 text-slate-200 hover:border-indigo-400'
+                    : 'border-slate-800 bg-slate-800/40 text-slate-400 hover:border-slate-700 hover:text-slate-200'
             ]"
           >
             <!-- Zone 1: Dedicated Checkbox Gutter -->
@@ -560,13 +602,20 @@ const applyRange = () => {
             </button>
 
             <!-- Zone 2: Dedicated, Unobscured Episode Title -->
-            <div class="flex-1 min-w-0 px-2 text-center">
+            <div class="flex-1 min-w-0 px-2 text-center flex items-center justify-center gap-1">
               <span
                 data-testid="episode-title"
                 :data-episode-title="ep.ep_number"
                 class="font-mono font-medium text-xs text-slate-200 truncate select-none block"
               >
                 第 {{ ep.ep_number < 10 ? '0' + ep.ep_number : ep.ep_number }} 集
+              </span>
+              <span
+                v-if="isEpisodeMissing(ep.ep_number)"
+                data-testid="missing-episode-badge"
+                class="rounded bg-amber-900/70 border border-amber-700/50 px-1 py-0.2 text-[10px] text-amber-300 font-sans"
+              >
+                缺集
               </span>
             </div>
 
@@ -576,12 +625,16 @@ const applyRange = () => {
               data-testid="btn-preview-episode"
               :data-episode-preview="ep.ep_number"
               :data-active="activePreviewEp === ep.ep_number"
-              @click.stop="switchPreview(ep.ep_number)"
+              :disabled="isEpisodeMissing(ep.ep_number)"
+              :title="isEpisodeMissing(ep.ep_number) ? '當前鎖定頻道未提供此集數' : '預覽播放'"
+              @click.stop="!isEpisodeMissing(ep.ep_number) && switchPreview(ep.ep_number)"
               :class="[
                 'flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors shrink-0',
-                activePreviewEp === ep.ep_number
-                  ? 'bg-violet-600 text-white shadow-xs'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
+                isEpisodeMissing(ep.ep_number)
+                  ? 'opacity-40 cursor-not-allowed bg-slate-800 text-slate-500 border border-slate-800'
+                  : activePreviewEp === ep.ep_number
+                    ? 'bg-violet-600 text-white shadow-xs'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700/60'
               ]"
             >
               <span class="sr-only" data-testid="btn-preview-ep"></span>

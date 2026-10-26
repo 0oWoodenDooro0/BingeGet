@@ -7,7 +7,7 @@ pub use crate::engine::queue::{
     start_download_queue_core,
 };
 pub use crate::engine::stream::prepare_episode_stream as prepare_episode_stream_core;
-use crate::extractors::{global_catalog, Catalog, ExtractorRegistry};
+use crate::extractors::{global_catalog, Catalog};
 use crate::models::{
     DownloadQueuePayload, PreviewStreamInfo, SearchResult, SeriesMetadata, StreamDetails,
     StreamSession, SystemEnvironment,
@@ -82,14 +82,6 @@ pub async fn search_series_with_catalog(
     catalog: &Catalog,
 ) -> Result<Vec<SearchResult>, String> {
     catalog.search(client, keyword).await
-}
-
-pub async fn search_series_with_registry(
-    client: &reqwest::Client,
-    keyword: &str,
-    registry: &ExtractorRegistry,
-) -> Result<Vec<SearchResult>, String> {
-    search_series_with_catalog(client, keyword, registry).await
 }
 
 pub async fn search_series_core(

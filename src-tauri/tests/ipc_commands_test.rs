@@ -2,10 +2,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bingeget::commands::{
     detect_system_environment_core, fetch_episode_m3u8_core, parse_series_metadata_core,
-    search_series_core, search_series_with_registry,
+    search_series_core, search_series_with_catalog,
 };
 use bingeget::extractors::registry::{global_registry, ExtractorRegistry};
-use bingeget::extractors::SiteExtractor;
+use bingeget::extractors::{Catalog, SiteExtractor};
 use bingeget::models::{SearchResult, SeriesMetadata};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -268,17 +268,17 @@ async fn test_search_series_concurrent_aggregation() {
 #[tokio::test]
 async fn test_search_series_error_isolation() {
     let client = reqwest::Client::new();
-    let mut registry = ExtractorRegistry::new();
+    let mut catalog = Catalog::new();
 
-    registry.register(Arc::new(DummyExtractor {
+    catalog.register(Arc::new(DummyExtractor {
         id: "dummy",
         name: "Dummy Source",
         domain: "dummy.tv",
     }));
-    registry.register(Arc::new(FailingExtractor));
+    catalog.register(Arc::new(FailingExtractor));
 
-    let res = search_series_with_registry(&client, "test", &registry).await;
-    assert!(res.is_ok(), "search_series_with_registry should not fail when an extractor fails");
+    let res = search_series_with_catalog(&client, "test", &catalog).await;
+    assert!(res.is_ok(), "search_series_with_catalog should not fail when an extractor fails");
     let results = res.unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].title, "Dummy Title");
