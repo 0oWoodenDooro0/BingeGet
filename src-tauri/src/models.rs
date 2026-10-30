@@ -125,3 +125,22 @@ pub struct PreviewStreamInfo {
     pub referer: String,
     pub proxy_url: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/types/generated/")]
+pub struct StreamSession {
+    pub m3u8_url: String,
+    pub referer: String,
+    pub proxy_url: Option<String>,
+    pub stream_details: StreamDetails,
+}
+
+impl StreamSession {
+    pub fn to_preview_stream_info(&self) -> PreviewStreamInfo {
+        PreviewStreamInfo {
+            m3u8_url: self.m3u8_url.clone(),
+            referer: self.referer.clone(),
+            proxy_url: self.proxy_url.clone(),
+        }
+    }
+}

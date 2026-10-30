@@ -411,4 +411,65 @@ describe('useDownloadQueue composable', () => {
     clearQueue();
     expect(queue.value).toEqual([]);
   });
+  it('invokes cancel_download_task IPC command with episode in Tauri mode', async () => {
+    const mockInvoke = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@tauri-apps/api/core', () => ({
+      invoke: mockInvoke,
+    }));
+
+    // @ts-expect-error Mock Tauri
+    window.__TAURI_INTERNALS__ = {};
+
+    const { queue, cancelDownload } = useDownloadQueue({ autoListen: false });
+    queue.value = [
+      {
+        id: 1,
+        spec: {
+          m3u8_url: '',
+          custom_title: '測試劇集',
+          season: 1,
+          episode: 2,
+          save_dir: '/downloads',
+          referer: undefined,
+        },
+        state: { type: 'Downloading' },
+      },
+    ];
+
+    await cancelDownload(2);
+
+    expect(queue.value[0].state).toEqual({ type: 'Cancelled' });
+    expect(mockInvoke).toHaveBeenCalledWith('cancel_download_task', { episode: 2 });
+  });
+
+  it('invokes retry_download_task IPC command with episode in Tauri mode', async () => {
+    const mockInvoke = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('@tauri-apps/api/core', () => ({
+      invoke: mockInvoke,
+    }));
+
+    // @ts-expect-error Mock Tauri
+    window.__TAURI_INTERNALS__ = {};
+
+    const { queue, retryDownload } = useDownloadQueue({ autoListen: false });
+    queue.value = [
+      {
+        id: 1,
+        spec: {
+          m3u8_url: '',
+          custom_title: '測試劇集',
+          season: 1,
+          episode: 1,
+          save_dir: '/downloads',
+          referer: undefined,
+        },
+        state: { type: 'Failed', error: 'Network failure' },
+      },
+    ];
+
+    await retryDownload(1);
+
+    expect(queue.value[0].state).toEqual({ type: 'Queued' });
+    expect(mockInvoke).toHaveBeenCalledWith('retry_download_task', { episode: 1 });
+  });
 });

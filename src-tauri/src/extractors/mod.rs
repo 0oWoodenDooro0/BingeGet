@@ -1,8 +1,10 @@
+pub mod catalog;
 pub mod chinaq;
 pub mod juqing;
 pub mod registry;
 pub mod text_normalize;
 
+pub use catalog::{global_catalog, Catalog};
 pub use registry::{global_registry, ExtractorRegistry};
 
 use async_trait::async_trait;

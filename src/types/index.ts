@@ -11,6 +11,7 @@ export type { DownloadTaskSpec } from './generated/DownloadTaskSpec';
 export type { DownloadProgress } from './generated/DownloadProgress';
 export type { StreamDetails } from './generated/StreamDetails';
 export type { PreviewStreamInfo } from './generated/PreviewStreamInfo';
+export type { StreamSession } from './generated/StreamSession';
 
 // Media error and preview definitions
 export * from './media';

@@ -151,89 +151,69 @@ describe('useEpisodePreview composable', () => {
     expect(error.value).toContain('GStreamer pipeline initialization failed');
     expect(error.value).toMatch(/外部播放器/i);
   });
-  it("propagates sourceId and source_id to get_episode_preview_stream and probe_episode_stream", async () => {
+
+  it('calls atomic prepare_episode_stream IPC command and eliminates duplicate parallel calls', async () => {
     const mockInvoke = vi.fn().mockImplementation((cmd: string) => {
-      if (cmd === "get_episode_preview_stream") {
+      if (cmd === 'prepare_episode_stream') {
         return Promise.resolve({
-          m3u8_url: "https://tw.juqing.app/stream.m3u8",
-          referer: "https://tw.juqing.app/vod/play/id/drama1-ch1-1.html",
-          proxy_url: "http://127.0.0.1:8899/proxy?url=https://tw.juqing.app/stream.m3u8",
-        });
-      }
-      if (cmd === "probe_episode_stream") {
-        return Promise.resolve({
-          resolution: "1920x1080 (1080p)",
-          bitrate: "3,200 kbps",
-          video_codec: "H.264 / AVC",
-          audio_codec: "AAC",
-          fps: 30,
-          duration_secs: 2700,
+          m3u8_url: 'https://tw.juqing.app/stream.m3u8',
+          referer: 'https://tw.juqing.app/vod/play/id/drama1-ch1-1.html',
+          proxy_url: 'http://127.0.0.1:8899/proxy?url=https://tw.juqing.app/stream.m3u8',
+          stream_details: {
+            resolution: '1920x1080 (1080p)',
+            bitrate: '3,200 kbps',
+            video_codec: 'H.264 / AVC',
+            audio_codec: 'AAC',
+            fps: 30,
+            duration_secs: 2700,
+          },
         });
       }
       return Promise.resolve(null);
     });
 
-    vi.doMock("@tauri-apps/api/core", () => ({
+    vi.doMock('@tauri-apps/api/core', () => ({
       invoke: mockInvoke,
     }));
     // @ts-expect-error Mock Tauri
     window.__TAURI_INTERNALS__ = {};
 
     try {
-      const { loadPreview, probeStream } = useEpisodePreview();
+      const { loadPreview, probeStream, streamDetails, previewStreamInfo } = useEpisodePreview();
 
       // Explicit sourceId / source_id
-      await loadPreview("drama1", "ep1", 1, "ch1", "juqing");
-      expect(mockInvoke).toHaveBeenCalledWith("get_episode_preview_stream", {
-        dramaId: "drama1",
-        epId: "ep1",
-        channel: "ch1",
-        sourceId: "juqing",
-        source_id: "juqing",
+      await loadPreview('drama1', 'ep1', 1, 'ch1', 'juqing');
+
+      // Verified: called atomic prepare_episode_stream
+      expect(mockInvoke).toHaveBeenCalledWith('prepare_episode_stream', {
+        dramaId: 'drama1',
+        epId: 'ep1',
+        channel: 'ch1',
+        sourceId: 'juqing',
+        source_id: 'juqing',
       });
-      expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
-        dramaId: "drama1",
-        epId: "ep1",
-        channel: "ch1",
-        sourceId: "juqing",
-        source_id: "juqing",
-      });
+
+      // Verified: did NOT call duplicate get_episode_preview_stream or probe_episode_stream
+      expect(mockInvoke).not.toHaveBeenCalledWith('get_episode_preview_stream', expect.anything());
+      expect(mockInvoke).not.toHaveBeenCalledWith('probe_episode_stream', expect.anything());
+
+      // Verified state populated
+      expect(previewStreamInfo.value?.m3u8_url).toBe('https://tw.juqing.app/stream.m3u8');
+      expect(streamDetails.value?.resolution).toBe('1920x1080 (1080p)');
 
       // Default sourceId / source_id when omitted
-      await loadPreview("drama1", "ep1", 1, "ch1");
-      expect(mockInvoke).toHaveBeenCalledWith("get_episode_preview_stream", {
-        dramaId: "drama1",
-        epId: "ep1",
-        channel: "ch1",
-        sourceId: "chinaq",
-        source_id: "chinaq",
-      });
-      expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
-        dramaId: "drama1",
-        epId: "ep1",
-        channel: "ch1",
-        sourceId: "chinaq",
-        source_id: "chinaq",
+      await loadPreview('drama1', 'ep1', 1, 'ch1');
+      expect(mockInvoke).toHaveBeenCalledWith('prepare_episode_stream', {
+        dramaId: 'drama1',
+        epId: 'ep1',
+        channel: 'ch1',
+        sourceId: 'chinaq',
+        source_id: 'chinaq',
       });
 
-      // probeStream helper
-      await probeStream("drama1", "ep1", "ch1", "juqing");
-      expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
-        dramaId: "drama1",
-        epId: "ep1",
-        channel: "ch1",
-        sourceId: "juqing",
-        source_id: "juqing",
-      });
-
-      await probeStream("drama1", "ep1", "ch1");
-      expect(mockInvoke).toHaveBeenCalledWith("probe_episode_stream", {
-        dramaId: "drama1",
-        epId: "ep1",
-        channel: "ch1",
-        sourceId: "chinaq",
-        source_id: "chinaq",
-      });
+      // probeStream helper also calls atomic prepare_episode_stream
+      const probed = await probeStream('drama1', 'ep1', 'ch1', 'juqing');
+      expect(probed.resolution).toBe('1920x1080 (1080p)');
     } finally {
       // @ts-expect-error cleanup
       delete window.__TAURI_INTERNALS__;

@@ -340,3 +340,52 @@ async fn test_proxy_unreachable_upstream_fails_fast_with_502() {
         resp_str
     );
 }
+
+#[tokio::test]
+async fn test_proxy_serves_cached_m3u8_without_upstream_request() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let target_url = "http://127.0.0.1:59998/cached_stream.m3u8";
+    let sample_m3u8 = "#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:6.000,\nseg1.ts\n#EXT-X-ENDLIST\n";
+
+    // Cache the playlist in proxy cache
+    bingeget::engine::proxy::cache_playlist(target_url, sample_m3u8).await;
+
+    // Notice we use a dummy client that would fail if it tried to connect to 127.0.0.1:59998
+    let dummy_client = reqwest::Client::new();
+
+    let proxy_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let proxy_addr = proxy_listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        if let Ok((socket, _)) = proxy_listener.accept().await {
+            bingeget::engine::proxy::handle_connection(socket, dummy_client, proxy_addr.port()).await;
+        }
+    });
+
+    let mut client_stream = tokio::net::TcpStream::connect(proxy_addr).await.unwrap();
+    let req = format!(
+        "GET /proxy?url=http%3A%2F%2F127.0.0.1%3A59998%2Fcached_stream.m3u8 HTTP/1.1\r\nHost: {}\r\n\r\n",
+        proxy_addr
+    );
+    client_stream.write_all(req.as_bytes()).await.unwrap();
+
+    let mut resp_buf = [0u8; 2048];
+    let n = client_stream.read(&mut resp_buf).await.unwrap();
+    let resp_str = String::from_utf8_lossy(&resp_buf[..n]);
+
+    assert!(
+        resp_str.contains("HTTP/1.1 200 OK"),
+        "Proxy should return 200 OK from cache without upstream, got: {}",
+        resp_str
+    );
+    assert!(
+        resp_str.contains("application/vnd.apple.mpegurl"),
+        "Content-Type should be mpegurl"
+    );
+    assert!(
+        resp_str.contains("seg1.ts"),
+        "Rewritten playlist body should contain seg1.ts, got: {}",
+        resp_str
+    );
+}
