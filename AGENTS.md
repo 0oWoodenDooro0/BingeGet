@@ -6,23 +6,31 @@
 |---|---|
 | Setup & Git hooks | `npm run setup` |
 | Frontend checks | `npm run test:fe` |
-| Test rule check | `npm run check:tests` |
 | Backend checks | `npm run test:be` |
 | Full test suite | `npm test` |
+| Test rule check | `npm run check:tests` |
 | Prune stale worktrees | `npm run worktree:prune` |
+
+## Codebase Navigation
+
+- `src/components/`: Vue 3 UI views and components ([`EpisodePicker.vue`](file:///home/user/IdeaProjects/BingeGet/src/components/EpisodePicker.vue), [`ChannelSelector.vue`](file:///home/user/IdeaProjects/BingeGet/src/components/ChannelSelector.vue), [`DownloadQueue.vue`](file:///home/user/IdeaProjects/BingeGet/src/components/DownloadQueue.vue)).
+- `src/composables/`: Client state and session composables ([`useSeriesSession.ts`](file:///home/user/IdeaProjects/BingeGet/src/composables/useSeriesSession.ts), [`useEpisodePreview.ts`](file:///home/user/IdeaProjects/BingeGet/src/composables/useEpisodePreview.ts), [`useDownloadQueue.ts`](file:///home/user/IdeaProjects/BingeGet/src/composables/useDownloadQueue.ts)).
+- `src-tauri/src/engine/`: Download queue (`queue.rs`), streaming proxy (`proxy.rs`), atomic stream sessions (`stream.rs`), and stream probing (`probe.rs`).
+- `src-tauri/src/extractors/`: Unified catalog facade (`catalog.rs`), registry (`registry.rs`), and site extractor plugins (`chinaq.rs`, `juqing.rs`).
+- *Exploration tip*: When searching files via shell, avoid dumping large trees; always exclude `node_modules` and `src-tauri/target`.
 
 ## Critical Guardrails
 
 - **Dependencies**: If `node_modules` or CLI tools (`vue-tsc`) are missing, run `npm run setup` first.
-- **Lockfile Sync**: Always keep `package-lock.json` in sync with `package.json` (`npm run check:lockfile`). Modifying `package.json` without updating the lockfile fails pre-commit and CI.
+- **Lockfile Sync**: Keep `package-lock.json` in sync with `package.json` (`npm run check:lockfile`). Modifying `package.json` without updating the lockfile fails pre-commit and CI.
 - **Branch Lock**: If git checkout fails due to a stale worktree lock, run `npm run worktree:prune` or `git worktree remove --force <path>`.
 
-## Development & Testing Rules
+## Standards & Architecture
 
-- **Behavioral Tests Only**: Verify public interfaces, state transitions, and event emissions. Strictly avoid asserting static copy or template labels. Enforced by `npm run check:tests`.
-- **Media Player Lifecycle**: Enforce Deferred Stream Attachment for `<video>` previews to avoid WebKitGTK/GStreamer pipeline deadlocks. See `docs/architecture/media-preview-lifecycle.md`.
-- **Extractor Matrix**: Verify all supported regional slugs (`tv-cn`, `tv-kr`, `tv-tw`, `tv-jp`, `tv-hk`) when testing extractors.
-- **Architecture Boundaries**: Decouple state presentation (e.g. search results) from input controls (e.g. URL bar); route referer and header logic through `SiteExtractor` methods rather than hardcoding.
+Review-time rules, Fowler smells, architecture boundaries, and testing standards are maintained in [`CODING_STANDARDS.md`](file:///home/user/IdeaProjects/BingeGet/CODING_STANDARDS.md).
+- **Behavioral Tests Only**: Verify public interfaces and state transitions; avoid asserting static copy. Enforced by `npm run check:tests`.
+- **Media Preview**: Follow the deferred attachment lifecycle in [`docs/architecture/media-preview-lifecycle.md`](file:///home/user/IdeaProjects/BingeGet/docs/architecture/media-preview-lifecycle.md).
+- **Domain Vocabulary**: Strictly conform to [`GLOSSARY.md`](file:///home/user/IdeaProjects/BingeGet/GLOSSARY.md) (no banned terms like `ep`).
 
 ## Orchestration & Delegation
 
@@ -31,20 +39,9 @@
 - **Scoped Task Boundaries**: The coordinator brief MUST declare `Allowed Paths` (the specific components, composables, or tests being modified). The implementation agent must NOT touch files outside this boundary, and review agents must report changes outside allowed paths as hard scope creep.
 - **Mandatory Review Gate**: An integration branch or PR cannot be marked ready until two-axis code review (Standards & Spec) completes via `delegate_task` and all hard findings are resolved.
 
-## Agent skills
+## Context Pointers
 
-### Issue tracker
-
-Issues and specs live as GitHub issues. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default five-role triage vocabulary. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context layout (`GLOSSARY.md` + `docs/adr/`). See `docs/agents/domain.md`.
-
-### Media Preview Architecture
-
-Video preview lifecycle and WebKitGTK degradation guide. See `docs/architecture/media-preview-lifecycle.md`.
+- **Coding Standards**: See [`CODING_STANDARDS.md`](file:///home/user/IdeaProjects/BingeGet/CODING_STANDARDS.md).
+- **Domain Language**: See [`GLOSSARY.md`](file:///home/user/IdeaProjects/BingeGet/GLOSSARY.md) and [`docs/adr/`](file:///home/user/IdeaProjects/BingeGet/docs/adr/).
+- **Issue Tracker & Triage**: See [`docs/agents/issue-tracker.md`](file:///home/user/IdeaProjects/BingeGet/docs/agents/issue-tracker.md) and [`docs/agents/triage-labels.md`](file:///home/user/IdeaProjects/BingeGet/docs/agents/triage-labels.md).
+- **Media Preview Architecture**: See [`docs/architecture/media-preview-lifecycle.md`](file:///home/user/IdeaProjects/BingeGet/docs/architecture/media-preview-lifecycle.md).
